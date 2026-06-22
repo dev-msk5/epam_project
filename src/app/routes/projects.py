@@ -1,14 +1,27 @@
+"""
+ - POST /projects                      (Create project)
+  - GET /projects                       (Get all accessible projects)
+  - GET /project/<project_id>/info      (Get project details)
+  - PUT /project/<project_id>/info      (Update project details)
+  - DELETE /project/<project_id>        (Delete project)
+  - POST /project/<project_id>/invite?user=<login>  (Grant access to user)
+  
+  - GET /project/<project_id>/share?with=<email>   (Send share link via email - Optional Phase 1)
+"""
 from fastapi import APIRouter
-
 router = APIRouter()
 
-"""
-GET /project/<project_id>/info - Return project’s details, if user has access
-PUT /project/<project_id>/info - Update projects details - name, description. Returns the updated project’s info
-DELETE /project/<project_id>- Delete project, can only be performed by the projects’ owner. Deletes the corresponding  documents
-GET /project/<project_id>/documents- Return all of the project's documents
-POST /project/<project_id>/documents - Upload document/documents for a specific project
-"""
+
+@router.get("/projects")
+async def get_projects():
+    return {"message": "List of projects"}
+
+
+@router.post("/project/{project_id}/invite?user={login}")
+async def invite_user(project_id: int, login: str):
+    # if project_owner != current_user:
+    #    return {"error": "Only project owner can invite users"}
+    return {"message": f"User {login} invited to project {project_id}"}
 
 
 @router.get("/project/{project_id}/info")

@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+# Pydantic settings, reads from .env
 
 
 class Settings(BaseSettings):
