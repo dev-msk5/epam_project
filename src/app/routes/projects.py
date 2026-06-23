@@ -8,13 +8,17 @@
   
   - GET /project/<project_id>/share?with=<email>   (Send share link via email - Optional Phase 1)
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from app.db.session import get_session
+from sqlalchemy.orm import Session
 router = APIRouter()
 
 
 @router.get("/projects")
-async def get_projects():
-    return {"message": "List of projects"}
+async def get_projects(session: Session = Depends(get_session)):
+    # You are officially connected!
+    # You can now run queries like: db.query(YourModel).all()
+    return {"status": "Connected to the database successfully!"}
 
 
 @router.post("/project/{project_id}/invite?user={login}")
@@ -34,7 +38,7 @@ async def put_project_info(project_id: int, name: str, description: str):
     return {"message": f"Project {project_id} updated with name: {name} and description: {description}"}
 
 
-@router.delete("/project/{project_id}")
+@router.delete("/project/{project_id}", status_code=204)
 async def delete_project(project_id: int):
     # only by the projects owner
     return {"message": f"Project {project_id} deleted"}

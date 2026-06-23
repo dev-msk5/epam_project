@@ -1,11 +1,13 @@
 services:
   app:
     build: .
-    command: uvicorn src.app.app:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      - PYTHONPATH=/app/src
     ports:
       - "8000:8000"
     volumes:
-      - .:/app        # ← mirrors your local folder into the container
+      - .:/app        # mirrors local folder into the container
     depends_on:
       db:
         condition: service_healthy

@@ -8,23 +8,56 @@ version = "0.1.0"
 requires-python = ">=3.12"
 
 dependencies = [
-    "fastapi",
-    "uvicorn[standard]",
-    "sqlalchemy[asyncio]",
-    "asyncpg",
-    "alembic",
-    "pydantic-settings",
-    "python-jose[cryptography]",
-    "passlib[bcrypt]",
-    "python-multipart",
-    "boto3",
+    # --- Web Framework ---
+    "fastapi[standard]",        # replaces fastapi + uvicorn[standard] + python-multipart
+                                # bundles them all in one
+
+    # --- Database ---
+    "sqlalchemy[asyncio]",      # ORM with async support
+    "asyncpg",                  # async PostgreSQL driver
+    "alembic",                  # database migrations
+
+    # --- Config ---
+    "pydantic-settings",        # reads .env into typed settings
+
+    # --- Auth & Security ---
+    "pyjwt[crypto]",            # replaces python-jose (abandoned)
+                                # crypto extra adds RS256 support
+    "pwdlib[argon2]",           # replaces passlib (unmaintained, breaks 3.13+)
+                                # argon2 is the modern hashing standard
+
+    # --- AWS ---
+    "boto3",                    # AWS S3 + Lambda SDK
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "pytest-asyncio",
-    "httpx",
-    "ruff",
-    "mypy",
+    # --- Testing ---
+    "pytest",                   # test runner
+    "pytest-asyncio",           # async test support
+    "httpx",                    # async test client for FastAPI
+    "pytest-cov",               # test coverage reports
+
+    # --- Code Quality ---
+    "ruff",                     # linter + formatter
+    "mypy",                     # static type checker
+
+    # --- Type Stubs ---
+    "boto3-stubs[s3]",          # type hints for boto3 S3
 ]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]       # errors, pyflakes, isort
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+strict = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"     
+testpaths = ["tests"]
