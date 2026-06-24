@@ -1,0 +1,2 @@
+Pydantic Field + Typing Annotated - Great type checking and validation metadata / constraints  -- "This is an int, and Pydantic should validate it using the rules stored in Field(gt=0)."
+Field default_factory - generates a default value each time a model instance is created, This is especially useful for mutable defaults (lists, dicts, sets) and dynamically generated values (UUIDs, timestamps, etc.), since they would use the same [],{}
