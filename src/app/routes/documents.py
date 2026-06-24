@@ -17,29 +17,29 @@ router = APIRouter()
 
 
 # OK
-@router.get("/project/{project_id}/documents", response_model=list[Document], response_code=200)
+@router.get("/project/{project_id}/documents", response_model=list[Document], status_code=200)
 async def get_project_docs(project_id: int, session: AsyncSession = Depends(get_session)):
     # TODO check if user has access to the project
     docs = await session.execute(select(Document).where(Document.project_id == project_id))
     return docs.scalars().all()
 
 
-@router.post("/project/{project_id}/documents", response_code=201)  # Created
+@router.post("/project/{project_id}/documents", status_code=201)  # Created
 async def post_project_docs(project_id: int):
     return {"message": f"Documents uploaded for project {project_id}"}
 
 
-@router.get("/document/{document_id}", response_model=Document, response_code=200)
+@router.get("/document/{document_id}", response_model=Document, status_code=200)
 async def get_document(document_id: int):
     # only if user has access to the corresponding project
     return {"message": f"Document {document_id} downloaded"}
 
 
-@router.put("/document/{document_id}", response_code=200)
+@router.put("/document/{document_id}", status_code=200)
 async def put_document(document_id: int):
     return {"message": f"Document {document_id} updated"}
 
 
-@router.delete("/document/{document_id}", response_code=204)  # No Content
+@router.delete("/document/{document_id}", status_code=204)  # No Content
 async def delete_document(document_id: int):
     return {"message": f"Document {document_id} deleted"}

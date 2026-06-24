@@ -1,7 +1,7 @@
 # DocumentOut, DocumentUpdate
 from datetime import datetime
 from typing import Annotated
-from pydantic import BaseModel, Field, PositiveInt
+from pydantic import BaseModel, Field, PositiveInt, ConfigDict
 
 
 class Document(BaseModel):
@@ -12,6 +12,5 @@ class Document(BaseModel):
     created_at: Annotated[datetime, Field(default_factory=datetime.now)]
     updated_at: Annotated[datetime, Field(default_factory=datetime.now)]
 
-    class Config:
-        # When validating this model, accept objects with attributes (e.g. obj.id) as input.
-        from_attributes = True
+    # When validating this model, accept objects with attributes (e.g. obj.id) as input
+    model_config = ConfigDict(from_attributes=True)

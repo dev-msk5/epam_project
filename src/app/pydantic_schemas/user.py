@@ -1,5 +1,5 @@
 # UserCreate/Update, UserOut and User Pydantic schemas for FastAPI
-from pydantic import BaseModel, Field, PositiveInt
+from pydantic import BaseModel, Field, PositiveInt, ConfigDict
 from typing import Annotated
 
 
@@ -10,29 +10,26 @@ class User(BaseModel):
     password: Annotated[str, Field(min_length=8, max_length=100)]
     projects: Annotated[list, Field(default_factory=list)]
 
-    class Config:
-        from_attributes = True
+    # When validating this model, accept objects with attributes (e.g. obj.id) as input
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserCreate(BaseModel):
     login: Annotated[str, Field(min_length=8, max_length=100)]
     password: Annotated[str, Field(min_length=8, max_length=100)]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserUpdate(BaseModel):
     login: Annotated[str, Field(max_length=100)] | None = None
     password: Annotated[str, Field(min_length=8, max_length=100)] | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserOut(BaseModel):
     id: int
     login: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
