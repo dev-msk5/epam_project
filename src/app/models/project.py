@@ -1,27 +1,26 @@
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy import ForeignKey, Integer, String
+
+from app.pydantic_schemas.document import Document
+from app.pydantic_schemas.user import User
 
 
 class Project(Base):
     __tablename__ = "projects"
 
-    id = Column(Integer, primary_key=True, index=True, nullable=False)
-    name = Column(String, index=True, nullable=False)
-    owner_id = Column(Integer, ForeignKey("users.id"),
-                      index=True, nullable=False)
-    description = Column(String, index=True, nullable=False)
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    owner_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"),
+                                          index=True, nullable=False)
+    description: Mapped[str] = mapped_column(
+        String(200), index=True, nullable=False)
 
     # relationship to owner (User)
-    owner = relationship("User", back_populates="projects")
+    owner: Mapped["User"] = relationship("User", back_populates="projects")
 
     # relationship to documents (one-to-many)
-    documents = relationship(
+    documents: Mapped[list[Document]] = relationship(
         "Document", back_populates="project", cascade="all, delete-orphan")
-
-# class Project(Base):
-#     documents: Mapped[list["Document"]] = relationship(
-#         back_populates="project",
-#         cascade="all, delete-orphan"   # cleans up automatically
-#     )

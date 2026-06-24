@@ -1,4 +1,4 @@
-# UserCreate/Update, UserOut
+# UserCreate/Update, UserOut and User Pydantic schemas for FastAPI
 from pydantic import BaseModel, Field, PositiveInt
 from typing import Annotated
 
@@ -9,6 +9,22 @@ class User(BaseModel):
     # Only in Create/Update
     password: Annotated[str, Field(min_length=8, max_length=100)]
     projects: Annotated[list, Field(default_factory=list)]
+
+    class Config:
+        from_attributes = True
+
+
+class UserCreate(BaseModel):
+    login: Annotated[str, Field(min_length=8, max_length=100)]
+    password: Annotated[str, Field(min_length=8, max_length=100)]
+
+    class Config:
+        from_attributes = True
+
+
+class UserUpdate(BaseModel):
+    login: Annotated[str, Field(max_length=100)] | None = None
+    password: Annotated[str, Field(min_length=8, max_length=100)] | None = None
 
     class Config:
         from_attributes = True
