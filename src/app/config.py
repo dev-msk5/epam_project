@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     # Read from environment; no default to force providing it in .env or env vars
     DATABASE_URL: str
     SECRET_KEY: str
-    ALGORITHM: str
+    ALGORITHM: str = "HSA256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     AWS_ACCESS_KEY_ID: str | None = None
     AWS_SECRET_ACCESS_KEY: str | None = None

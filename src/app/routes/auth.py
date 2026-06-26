@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
-
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.pydantic_schemas.user import UserCreate, UserLogin
-from src.app.db.session import get_session
+from app.pydantic_schemas.user import UserCreate, UserLogin, UserOut
+from app.pydantic_schemas.token import TokenOut
 from app.db.session import get_session
+from app.services.auth import register_user, authenticate_user
+from app.security import create_access_token
 
 #   - POST /auth                          (Create user/register)
 #   - POST /login                         (Login into service)
@@ -12,18 +13,16 @@ from app.db.session import get_session
 router = APIRouter()
 
 
-@router.post("/auth", status_code=201)  # Created
+@router.post("/auth", status_code=201, response_model=UserOut)  # Created
 async def register(user_data: UserCreate, session: AsyncSession = Depends(get_session)):
-    # result = await auth_service.register(user_data, session)
-    return None  #
-
-# TODO response_model=UserOut, status_code=201
-
-# response_model=TokenOut ?
+    # user registering from service, returns UserOut
+    user = await register_user(session, user_data.login, user_data.password)
+    return user
 
 
-@router.post("/login", status_code=200)  # OK
+@router.post("/login", status_code=200, response_model=TokenOut)  # OK
 async def login(credentials: UserLogin,
                 session: AsyncSession = Depends(get_session)):
-    # await auth_service.login(credentials, session)
-    return None
+    user = await authenticate_user(session, credentials.login, credentials.password)
+    token = create_access_token(user.id)
+    return TokenOut(access_token=token)

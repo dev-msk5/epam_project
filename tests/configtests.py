@@ -1,1 +1,10 @@
 # async test DB, TestClient, fixture for tokens (owner + participant)
+
+# - test database engine (separate test DB, not production)
+# - async test client (httpx AsyncClient)
+# - db session override (override get_session dependency)
+# - registered_user fixture (creates a user in DB)
+# - auth_token fixture (logs in, returns JWT bearer token)
+# - owner_token fixture (token for project owner)
+# - participant_token fixture (token for invited user)
+# - created_project fixture (creates a project, returns project_id)

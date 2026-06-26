@@ -10,6 +10,7 @@ from app.pydantic_schemas.project import ProjectCreate, ProjectUpdate
 
 
 async def _get_access(project_id: int, user_id: int, session: AsyncSession) -> Access | None:
+    """Helper function to retrieve access information for a user on a specific project"""
     result = await session.execute(
         select(Access).where(
             Access.project_id == project_id,
@@ -20,6 +21,7 @@ async def _get_access(project_id: int, user_id: int, session: AsyncSession) -> A
 
 
 async def create_project(data: ProjectCreate, owner: User, session: AsyncSession) -> Project:
+    """Create a new project and assign the owner with 'owner' role"""
     db_project = Project(
         name=data.name,
         description=data.description,
@@ -36,6 +38,7 @@ async def create_project(data: ProjectCreate, owner: User, session: AsyncSession
 
 
 async def get_projects(user: User, session: AsyncSession) -> list[Project]:
+    """Retrieve all projects that the user has access to"""
     result = await session.execute(
         select(Project)
         .join(Access, Access.project_id == Project.id)
@@ -46,6 +49,7 @@ async def get_projects(user: User, session: AsyncSession) -> list[Project]:
 
 
 async def get_project_by_id(project_id: int, user: User, session: AsyncSession) -> Project:
+    """Retrieve a specific project by ID if the user has access to it"""
     access = await _get_access(project_id, user.id, session)
     if not access:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -57,6 +61,7 @@ async def get_project_by_id(project_id: int, user: User, session: AsyncSession) 
 
 
 async def update_project(project_id: int, data: ProjectUpdate, user: User, session: AsyncSession) -> Project:
+    """Update a specific project if the user has access to it"""
     access = await _get_access(project_id, user.id, session)
     if not access:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -76,6 +81,7 @@ async def update_project(project_id: int, data: ProjectUpdate, user: User, sessi
 
 
 async def delete_project(project_id: int, user: User, session: AsyncSession) -> None:
+    """Delete a specific project if the user is the owner"""
     access = await _get_access(project_id, user.id, session)
     if not access or access.role != "owner":
         raise HTTPException(
@@ -91,6 +97,7 @@ async def delete_project(project_id: int, user: User, session: AsyncSession) -> 
 
 
 async def invite_user(project_id: int, login: str, owner: User, session: AsyncSession) -> None:
+    """Invite a user to a project if the requester is the owner of the project"""
     access = await _get_access(project_id, owner.id, session)
     if not access or access.role != "owner":
         raise HTTPException(
