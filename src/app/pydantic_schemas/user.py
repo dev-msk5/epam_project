@@ -23,6 +23,13 @@ class UserCreate(BaseModel):  # for POST requests, to create a new user
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserLogin(BaseModel):
+    login: Annotated[str, Field(min_length=8, max_length=100)]
+    password: Annotated[str, Field(min_length=8, max_length=100)]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class UserUpdate(BaseModel):  # for PUT requests, to update the user data
     login: Annotated[str, Field(max_length=100)] | None = None
     password: Annotated[str, Field(min_length=8, max_length=100)] | None = None

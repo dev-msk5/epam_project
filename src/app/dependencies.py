@@ -33,10 +33,9 @@ async def get_current_user(
                 detail="Invalid token payload"
             )
     except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token"
-        )
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
     user = await db.get(User, int(user_id))
     if not user:
