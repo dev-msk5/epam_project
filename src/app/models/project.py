@@ -1,7 +1,10 @@
+from datetime import datetime, time, timezone
+from typing import Annotated
+
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import ForeignKey, Integer, String, DateTime
 
 from app.db.base import Base
-from sqlalchemy import ForeignKey, Integer, String
 
 from app.pydantic_schemas.document import Document
 from app.pydantic_schemas.user import User
@@ -17,6 +20,10 @@ class Project(Base):
                                           index=True, nullable=False)
     description: Mapped[str] = mapped_column(
         String(200), index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, onupdate=datetime.now(time.zone.utc))
 
     # relationship to owner (User)
     owner: Mapped["User"] = relationship("User", back_populates="projects")

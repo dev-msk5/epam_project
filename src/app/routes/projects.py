@@ -18,6 +18,9 @@ from sqlalchemy.orm import Session
 router = APIRouter()
 
 
+# output validation is not necessary here probably
+
+
 @router.post("/projects", response_model=Project, status_code=201)  # Created
 async def create_project(project: Project, session: Session = Depends(get_session)):
     # Implementation for creating a new project
@@ -26,7 +29,6 @@ async def create_project(project: Project, session: Session = Depends(get_sessio
 
 @router.get("/projects", response_model=list[Project], status_code=200)  # OK
 async def get_projects(session: Session = Depends(get_session)):
-    # You are officially connected!
     # You can now run queries like: db.query(YourModel).all()
     return {"status": "Connected to the database successfully!"}
 

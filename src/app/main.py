@@ -14,7 +14,7 @@ from app.models.document import Document
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ── Startup ────────────────────────────────────────────
+    # start
     await init_db()
 
     async with AsyncSession(engine) as session:
@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
         new_project = Project(
             id=1,
             name="Test Project",
-            owner_id=new_user.id,            # use owner_id not owner
+            owner_id=new_user.id,
             description="This is a test project."
         )
         session.add(new_project)
@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
         new_document = Document(
             id=1,
             name="Test Document",
-            project_id=new_project.id,               # now new_project.id exists
+            project_id=new_project.id,               # new_project.id exists
             url="http://example.com/test_document",
             created_at=text("CURRENT_TIMESTAMP"),
             updated_at=text("CURRENT_TIMESTAMP")

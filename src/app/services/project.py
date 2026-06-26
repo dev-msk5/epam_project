@@ -17,3 +17,15 @@ async def create_project(project: Project, session: AsyncSession):
         await session.rollback()
         raise e
     return {"message": f"Project {db_project.name} created successfully"}
+
+
+async def get_projects(session: AsyncSession):
+    "Implementation for retrieving all accessible projects from the database"
+    try:
+        result = await session.execute(
+            f"SELECT {', '.join(ProjectModel.__table__.columns.keys())} FROM projects"
+        )
+        projects = result.fetchall()
+    except Exception as e:
+        raise e
+    return projects
