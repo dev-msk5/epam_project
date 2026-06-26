@@ -1,13 +1,16 @@
-from datetime import datetime, time, timezone
-from typing import Annotated
+from datetime import datetime
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey, Integer, String, DateTime
+from sqlalchemy import ForeignKey, Integer, String, DateTime, func
 
 from app.db.base import Base
 
-from app.pydantic_schemas.document import Document
-from app.pydantic_schemas.user import User
+# bc of circular import
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from app.models.user import User
+    from app.models.document import Document
 
 
 class Project(Base):
@@ -21,13 +24,10 @@ class Project(Base):
     description: Mapped[str] = mapped_column(
         String(200), index=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime)
+        DateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, onupdate=datetime.now(time.zone.utc))
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     # relationship to owner (User)
     owner: Mapped["User"] = relationship("User", back_populates="projects")
-
-    # relationship to documents (one-to-many)
-    documents: Mapped[list[Document]] = relationship(
-        "Document", back_populates="project", cascade="all, delete-orphan")
+    documents: Mapped[list["Document"]] = relationship("Document", ...)

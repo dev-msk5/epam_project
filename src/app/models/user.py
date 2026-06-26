@@ -12,7 +12,7 @@ class User(Base):
         Integer, primary_key=True, index=True, nullable=False)
     login: Mapped[str] = mapped_column(
         String(100), unique=True, index=True, nullable=False)
-    hashed_password: Mapped[str] = mapped_column(String(100), nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # one-to-many relationship to projects
     projects: Mapped[list[Project]] = relationship(
@@ -20,6 +20,4 @@ class User(Base):
 
     __table_args__ = (
         CheckConstraint('LENGTH(login) >= 8', name='login_min_length'),
-        CheckConstraint('LENGTH(hashed_password) >= 8',
-                        name='password_min_length'),
     )
