@@ -4,7 +4,8 @@ from pydantic import BaseModel, Field, PositiveInt, ConfigDict, model_validator
 from typing import Annotated
 
 
-class UserCreate(BaseModel):  # for POST requests, to create a new user
+class UserCreate(BaseModel):
+    """Pydantic model for creating a new user, for POST requests"""
     login: Annotated[str, Field(min_length=8, max_length=100)]
     password: Annotated[str, Field(min_length=8, max_length=100)]
     repeat_password: Annotated[str, Field(min_length=8, max_length=100)]
@@ -19,13 +20,15 @@ class UserCreate(BaseModel):  # for POST requests, to create a new user
 
 
 class UserLogin(BaseModel):
+    """Pydantic model for user login, for POST requests"""
     login: Annotated[str, Field(min_length=8, max_length=100)]
     password: Annotated[str, Field(min_length=8, max_length=100)]
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class UserUpdate(BaseModel):  # for PUT requests, to update the user data
+class UserUpdate(BaseModel):
+    """Pydantic model for updating an existing user, for PUT requests"""
     login: Annotated[str, Field(max_length=100)] | None = None
     password: Annotated[str, Field(min_length=8, max_length=100)] | None = None
 
@@ -35,7 +38,8 @@ class UserUpdate(BaseModel):  # for PUT requests, to update the user data
     model_config = ConfigDict(from_attributes=True)
 
 
-class UserOut(BaseModel):  # for GET requests, to return the user data
+class UserOut(BaseModel):
+    """Pydantic model for returning user data, for GET requests"""
     id: PositiveInt
     login: Annotated[str, Field(max_length=100)]
 

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 
 class Access(Base):
+    """Access model representing the relationship between users and projects, with a specific role assigned to each user for a project"""
     __tablename__ = "access"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

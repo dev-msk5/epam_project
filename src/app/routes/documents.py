@@ -1,9 +1,12 @@
 # CRUD /document/<id>, /project/<id>/documents
-#   - GET /project/<project_id>/documents       (Get all project documents)
-#   - POST /project/<project_id>/documents      (Upload document(s))
-#   - GET /document/<document_id>               (Download document)
-#   - PUT /document/<document_id>               (Update document)
-#   - DELETE /document/<document_id>            (Delete document)
+"""
+- GET /project/<project_id>/documents       (Get all project documents)
+- POST /project/<project_id>/documents      (Upload document(s))
+- GET /document/<document_id>               (Download document)
+- PUT /document/<document_id>               (Update document)
+- DELETE /document/<document_id>            (Delete document)
+"""
+
 
 from typing import List
 from fastapi import UploadFile, File
@@ -23,6 +26,7 @@ router = APIRouter()
 # OK
 @router.get("/project/{project_id}/documents", response_model=list[DocumentOut], status_code=200)
 async def get_project_docs(project_id: int, session: AsyncSession = Depends(get_session)):
+    """Get all documents for a specific project"""
     # TODO check if user has access to the project
     docs = await session.execute(select(Document).where(Document.project_id == project_id))
     return docs.scalars().all()
@@ -36,6 +40,7 @@ async def post_project_docs(
     session: AsyncSession = Depends(get_session),
     # current_user: User = Depends(get_current_user)
 ):
+    """Upload document(s) to a specific project"""
     # TODO check if user has access to the project
     # TODO save files to storage and create Document entries in the database
     return {"message": f"{len(files)} document(s) uploaded to project {project_id}"}
@@ -43,16 +48,22 @@ async def post_project_docs(
 
 @router.get("/document/{document_id}", response_model=DocumentOut, status_code=200)
 async def get_document(document_id: int):
+    """Download a specific document by its ID"""
+    # TODO check if user has access to the corresponding project
     # only if user has access to the corresponding project
     return {"message": f"Document {document_id} downloaded"}
 
 
 @router.put("/document/{document_id}", status_code=200, response_model=DocumentOut)
 async def put_document(document_id: int):
+    """Update a specific document by its ID"""
+    # TODO check if user has access to the corresponding project
     return {"message": f"Document {document_id} updated"}
 
 
 # No Content
 @router.delete("/document/{document_id}", status_code=204, response_model=None)
 async def delete_document(document_id: int):
+    """Delete a specific document by its ID"""
+    # TODO check if user has access to the corresponding project
     return {"message": f"Document {document_id} deleted"}

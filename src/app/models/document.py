@@ -8,6 +8,7 @@ from app.models.project import Project
 
 
 class Document(Base):
+    """Document model representing a document associated with a project"""
     __tablename__ = "documents"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

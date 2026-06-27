@@ -7,7 +7,8 @@ from app.pydantic_schemas.document import DocumentOut
 from app.pydantic_schemas.user import UserOut
 
 
-class ProjectCreate(BaseModel):  # for POST requests, to create a new project
+class ProjectCreate(BaseModel):
+    """Pydantic model for creating a new project, for POST requests"""
     name: Annotated[str, Field(min_length=4, max_length=100)]
     description: Annotated[str, Field(max_length=200)]
 
@@ -18,7 +19,8 @@ class ProjectCreate(BaseModel):  # for POST requests, to create a new project
     model_config = ConfigDict(from_attributes=True)
 
 
-class ProjectUpdate(BaseModel):  # for PUT requests, to update the project data
+class ProjectUpdate(BaseModel):
+    """Pydantic model for updating an existing project, for PUT requests"""
     name: Annotated[str, Field(min_length=4, max_length=100)] | None = None
     description: Annotated[str, Field(max_length=200)] | None = None
 
@@ -28,7 +30,8 @@ class ProjectUpdate(BaseModel):  # for PUT requests, to update the project data
     model_config = ConfigDict(from_attributes=True)
 
 
-class ProjectOut(BaseModel):  # for GET requests, to return the project data
+class ProjectOut(BaseModel):
+    """Pydantic model for returning project data, for GET requests"""
     id: PositiveInt
     name: Annotated[str, Field(max_length=100)]
     owner_id: PositiveInt

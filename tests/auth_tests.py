@@ -1,5 +1,5 @@
 # register, login, bad password, duplicate user
-test_register
+# test_register
 #  valid registration returns 201 + user data
 #  passwords don't match returns 422
 #  login shorter than 8 chars returns 422

@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 
 
 class User(Base):
+    """User model representing a user in the system, with associated projects and access entries"""
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

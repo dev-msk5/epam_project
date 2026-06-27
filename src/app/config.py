@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # Read from environment; no default to force providing it in .env or env vars
+    """Reads configuration from environment variables and .env file using Pydantic BaseSettings"""
     DATABASE_URL: str
     SECRET_KEY: str
     ALGORITHM: str = "HSA256"
