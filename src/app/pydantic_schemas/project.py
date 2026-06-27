@@ -1,4 +1,4 @@
-#  ProjectCreate, ProjectUpdate, ProjectOut
+# src/app/pydantic_schemas/project.py
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt
 from typing import Annotated
 from datetime import datetime
@@ -8,17 +8,12 @@ from app.pydantic_schemas.user import UserOut
 
 
 class ProjectCreate(BaseModel):  # for POST requests, to create a new project
-
     name: Annotated[str, Field(min_length=4, max_length=100)]
     description: Annotated[str, Field(max_length=200)]
-    invited_users: Annotated[list[UserOut], Field(
-        default_factory=list)] | None = None
-    documents: Annotated[list[DocumentOut], Field(
-        default_factory=list)] | None = None
 
-    # automated parts
-    # owner_id: PositiveInt # assigned automatically from the current user, ntot input from the user
-    # id: PositiveInt
+   # to avoid | None issues we declare without Annotation, we use default_factory to create empty lists and dicts, so not 1 mutual gets modified across instances
+    invited_users: list[UserOut] | None = Field(default_factory=list)
+    documents: list[DocumentOut] | None = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -26,12 +21,9 @@ class ProjectCreate(BaseModel):  # for POST requests, to create a new project
 class ProjectUpdate(BaseModel):  # for PUT requests, to update the project data
     name: Annotated[str, Field(min_length=4, max_length=100)] | None = None
     description: Annotated[str, Field(max_length=200)] | None = None
-    invited_users: Annotated[list[UserOut], Field(
-        default_factory=list)] | None = None
-    documents: Annotated[list[DocumentOut], Field(
-        default_factory=list)] | None = None
 
-    # updated_at: DB side
+    invited_users: list[UserOut] | None = Field(default_factory=list)
+    documents: list[DocumentOut] | None = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -41,12 +33,11 @@ class ProjectOut(BaseModel):  # for GET requests, to return the project data
     name: Annotated[str, Field(max_length=100)]
     owner_id: PositiveInt
     description: Annotated[str, Field(max_length=200)]
-    invited_users: Annotated[list[UserOut], Field(
-        default_factory=list)] | None = None
-    documents: Annotated[list[DocumentOut], Field(
-        default_factory=list)] | None = None
+
+    invited_users: list[UserOut] | None = Field(default_factory=list)
+    documents: list[DocumentOut] | None = Field(default_factory=list)
+
     updated_at: datetime | None = None
     created_at: datetime
 
-    # When validating this model, accept objects with attributes (e.g. obj.id) as input
     model_config = ConfigDict(from_attributes=True)

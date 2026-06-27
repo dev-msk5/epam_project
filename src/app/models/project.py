@@ -5,29 +5,30 @@ from sqlalchemy import ForeignKey, Integer, String, DateTime, func
 
 from app.db.base import Base
 
-# bc of circular import
-from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from app.models.user import User
     from app.models.document import Document
+    from app.models.access import Access
 
 
 class Project(Base):
     __tablename__ = "projects"
 
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, index=True, nullable=False)
-    name: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
-    owner_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"),
-                                          index=True, nullable=False)
-    description: Mapped[str] = mapped_column(
-        String(200), index=True, nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    owner_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False)
+    description: Mapped[str] = mapped_column(String(200), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), nullable=False)
+        DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+        DateTime, server_default=func.now(), onupdate=func.now())
 
-    # relationship to owner (User)
     owner: Mapped["User"] = relationship("User", back_populates="projects")
-    documents: Mapped[list["Document"]] = relationship("Document", ...)
+    documents: Mapped[list["Document"]] = relationship(
+        "Document", back_populates="project", cascade="all, delete-orphan"
+    )
+    access_entries: Mapped[list["Access"]] = relationship(
+        "Access", back_populates="project"
+    )

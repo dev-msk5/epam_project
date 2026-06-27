@@ -22,7 +22,7 @@ class Document(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
     # in bytes, for aws lambda to check if the file is too large
-    size: Mapped[int] = mapped_column(Integer, nullable=True)
+    size: Mapped[int] = mapped_column(Integer, nullable=True, default=0)
 
-    project: Mapped[Project] = relationship(
+    project: Mapped["Project"] = relationship(
         "Project", back_populates="documents")

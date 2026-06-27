@@ -21,7 +21,7 @@ dependencies = [
 
     # --- Auth & Security ---
     "pyjwt[crypto]",
-    "pwdlib[argon2]",
+    "pwdlib[argon2,bcrypt]",
 
     # --- AWS ---
     "boto3",

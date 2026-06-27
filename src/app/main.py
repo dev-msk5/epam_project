@@ -14,19 +14,20 @@ from app.models.document import Document
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    Context manager for the application lifespan
+    """
     # start
     await init_db()
 
     async with AsyncSession(engine) as session:
         new_user = User(
-            id=1,
             login="test_user",
             hashed_password="test_password")
         session.add(new_user)
         await session.flush()                        # flush to get new_user.id assigned
 
         new_project = Project(
-            id=1,
             name="Test Project",
             owner_id=new_user.id,
             description="This is a test project."
@@ -36,12 +37,12 @@ async def lifespan(app: FastAPI):
         await session.flush()
 
         new_document = Document(
-            id=1,
             name="Test Document",
             project_id=new_project.id,               # new_project.id exists
             url="http://example.com/test_document",
             created_at=text("CURRENT_TIMESTAMP"),
-            updated_at=text("CURRENT_TIMESTAMP")
+            updated_at=text("CURRENT_TIMESTAMP"),
+            owner_id=new_user.id,                       # new_user.id exists
         )
         session.add(new_document)
         await session.commit()
@@ -59,7 +60,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Project Dashboard", lifespan=lifespan)
 
-# Routing from other folders to app
+# Routing from router/ folder to app
 app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(documents.router)

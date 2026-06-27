@@ -15,7 +15,7 @@ from app.models.document import Document
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from src.app.pydantic_schemas.document import DocumentOut
+from app.pydantic_schemas.document import DocumentOut
 
 router = APIRouter()
 
