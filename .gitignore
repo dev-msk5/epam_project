@@ -1,3 +1,9 @@
 *.pyc
 .env
 venv/
+.env.local
+notes_for_me.txt
+.coverage
+__pycache__/
+.pytest_cache/
+coverage.xml

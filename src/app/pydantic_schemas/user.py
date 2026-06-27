@@ -1,4 +1,5 @@
-# UserCreate/Update, UserOut and User Pydantic schemas for FastAPI
+# src/app/pydantic_schemas/user.py
+
 from datetime import datetime
 from pydantic import BaseModel, Field, PositiveInt, ConfigDict, model_validator
 from typing import Annotated
@@ -32,9 +33,6 @@ class UserUpdate(BaseModel):
     login: Annotated[str, Field(max_length=100)] | None = None
     password: Annotated[str, Field(min_length=8, max_length=100)] | None = None
 
-   # to avoid | None issues we declare without Annotation, we use default_factory to create empty lists and dicts, so not 1 mutual gets modified across instances
-    projects: list | None = Field(default_factory=list)
-
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -42,11 +40,8 @@ class UserOut(BaseModel):
     """Pydantic model for returning user data, for GET requests"""
     id: PositiveInt
     login: Annotated[str, Field(max_length=100)]
-
-    # same as UserUpdate default_factory
-    projects: list | None = Field(default_factory=list)
-
-    updated_at: datetime | None = None
     created_at: datetime
+    updated_at: datetime | None = None
+    # If you need projects, use ProjectOut schema instead
 
     model_config = ConfigDict(from_attributes=True)

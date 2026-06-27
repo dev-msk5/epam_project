@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir --upgrade pip
 COPY pyproject.toml .
 COPY src/ src/
 
-# Install all dependencies (cached layer — only reruns if pyproject.toml changes)
+# Install all dependencies (cached layer - only reruns if pyproject.toml changes)
 RUN pip install --no-cache-dir -e ".[dev]"
 
 # Copy the rest of the project (code changes won't invalidate the pip layer)
@@ -20,10 +20,10 @@ COPY . .
 RUN adduser --disabled-password --no-create-home appuser
 USER appuser
 
-# Make sure app package is importable
+# Make sure app package is importable, NO SRC in imports
 ENV PYTHONPATH=/app/src
 
-# Don't buffer Python output — important for Docker logs
+# Don't buffer Python output, important for Docker logs
 ENV PYTHONUNBUFFERED=1
 
 # Don't write .pyc files into the container

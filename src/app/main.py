@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 
+from argon2 import hash_password
 from fastapi import FastAPI, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, delete, select
@@ -31,7 +32,9 @@ async def lifespan(app: FastAPI):
         else:
             new_user = User(
                 login="test_user",
-                hashed_password="test_password"
+                hashed_password=hash_password(
+                    # expects bytes , then decode to str for database storage
+                    "test_password".encode()).decode()
             )
             session.add(new_user)
             await session.flush()

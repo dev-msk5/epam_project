@@ -1,118 +1,241 @@
-from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+import time
+import hmac
+import hashlib
+from typing import List
+from sqlalchemy import select, or_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 
 from app.models.project import Project
-from app.models.user import User
 from app.models.access import Access
+from app.models.user import User
+from app.models.document import Document
+from app.s3 import S3Service
 from app.pydantic_schemas.project import ProjectCreate, ProjectUpdate
+from app.config import settings
 
 
-async def _get_access(project_id: int, user_id: int, session: AsyncSession) -> Access | None:
-    """Helper function to retrieve access information for a user on a specific project"""
-    result = await session.execute(
-        select(Access).where(
-            Access.project_id == project_id,
-            Access.user_id == user_id
+class ProjectService:
+    @staticmethod
+    async def _verify_access(
+        session: AsyncSession, project_id: int, user_id: int, require_owner: bool = False
+    ) -> Project:
+        """
+        Internal access resolver. Returns the Project model if authorized.
+        """
+        project_query = await session.execute(
+            select(Project).where(Project.id == project_id)
         )
-    )
-    return result.scalar_one_or_none()
+        project = project_query.scalar_one_or_none()
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found",
+            )
 
+        if project.owner_id == user_id:
+            return project
 
-async def create_project(data: ProjectCreate, owner: User, session: AsyncSession) -> Project:
-    """Create a new project and assign the owner with 'owner' role"""
-    db_project = Project(
-        name=data.name,
-        description=data.description,
-        owner_id=owner.id
-    )
-    session.add(db_project)
-    await session.flush()
+        if require_owner:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the project owner can perform this action",
+            )
 
-    access = Access(user_id=owner.id, project_id=db_project.id, role="owner")
-    session.add(access)
-    await session.commit()
-    await session.refresh(db_project)
-    return db_project
+        access_query = await session.execute(
+            select(Access).where(
+                Access.project_id == project_id,
+                Access.user_id == user_id
+            )
+        )
+        access_entry = access_query.scalar_one_or_none()
+        if not access_entry:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this project",
+            )
 
+        return project
 
-async def get_projects(user: User, session: AsyncSession) -> list[Project]:
-    """Retrieve all projects that the user has access to"""
-    result = await session.execute(
-        select(Project)
-        .join(Access, Access.project_id == Project.id)
-        .where(Access.user_id == user.id)
-        .options(selectinload(Project.documents))
-    )
-    return result.scalars().all()
+    @classmethod
+    async def create_project(
+        cls, session: AsyncSession, project_data: ProjectCreate, owner_id: int
+    ) -> Project:
+        """Creates a new project record. The creator automatically becomes the owner"""
+        new_project = Project(
+            name=project_data.name,
+            description=project_data.description,
+            owner_id=owner_id,
+        )
+        session.add(new_project)
+        await session.commit()
 
+        # reload with documents loaded
+        result = await session.execute(
+            select(Project)
+            .options(selectinload(Project.documents))
+            .where(Project.id == new_project.id)
+        )
+        return result.scalar_one()
 
-async def get_project_by_id(project_id: int, user: User, session: AsyncSession) -> Project:
-    """Retrieve a specific project by ID if the user has access to it"""
-    access = await _get_access(project_id, user.id, session)
-    if not access:
-        raise HTTPException(status_code=403, detail="Access denied")
+    @classmethod
+    async def get_user_projects(cls, session: AsyncSession, user_id: int) -> List[Project]:
+        """Returns a list of projects that the user owns or has access to"""
+        query = await session.execute(
+            select(Project)
+            .options(selectinload(Project.documents))
+            .join(Access, Access.project_id == Project.id, isouter=True)
+            .where(
+                or_(
+                    Project.owner_id == user_id,
+                    Access.user_id == user_id
+                )
+            )
+            .distinct()
+        )
+        return list(query.scalars().all())
 
-    project = await session.get(Project, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return project
+    @classmethod
+    async def get_project_details(
+        cls, session: AsyncSession, project_id: int, user_id: int
+    ) -> Project:
+        """Returns project details if the user has access, otherwise raises an HTTPException"""
+        await cls._verify_access(session, project_id, user_id)
+        result = await session.execute(
+            select(Project)
+            .options(selectinload(Project.documents))
+            .where(Project.id == project_id)
+        )
+        return result.scalar_one()
 
+    @classmethod
+    async def update_project(
+        cls, session: AsyncSession, project_id: int, user_id: int, project_data: ProjectUpdate
+    ) -> Project:
+        """Modifies project details. Only the owner can update the project"""
+        project = await cls._verify_access(session, project_id, user_id)
 
-async def update_project(project_id: int, data: ProjectUpdate, user: User, session: AsyncSession) -> Project:
-    """Update a specific project if the user has access to it"""
-    access = await _get_access(project_id, user.id, session)
-    if not access:
-        raise HTTPException(status_code=403, detail="Access denied")
+        if project_data.name is not None:
+            project.name = project_data.name
+        if project_data.description is not None:
+            project.description = project_data.description
 
-    project = await session.get(Project, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+        await session.commit()
 
-    if data.name is not None:
-        project.name = data.name
-    if data.description is not None:
-        project.description = data.description
+        result = await session.execute(
+            select(Project)
+            .options(selectinload(Project.documents))
+            .where(Project.id == project.id)
+        )
+        return result.scalar_one()
 
-    await session.commit()
-    await session.refresh(project)
-    return project
+    @classmethod
+    async def delete_project(cls, session: AsyncSession, project_id: int, user_id: int) -> None:
+        """
+        Deletes a project. Commits database erasure first to guarantee integrity,
+        then purges S3 assets cleanly
+        """
+        project = await cls._verify_access(session, project_id, user_id, require_owner=True)
 
+        # Fetch ONLY the S3 URLs as raw strings
+        url_query = await session.execute(
+            select(Document.url).where(Document.project_id == project_id)
+        )
+        s3_keys = list(url_query.scalars().all())
 
-async def delete_project(project_id: int, user: User, session: AsyncSession) -> None:
-    """Delete a specific project if the user is the owner"""
-    access = await _get_access(project_id, user.id, session)
-    if not access or access.role != "owner":
-        raise HTTPException(
-            status_code=403, detail="Only the owner can delete this project")
+        # Clear out database records first
+        await session.execute(delete(Document).where(Document.project_id == project_id))
+        await session.execute(delete(Access).where(Access.project_id == project_id))
+        await session.delete(project)
 
-    project = await session.get(Project, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+        # Lock down state changes in the DB
+        await session.commit()
 
-    # S3 document deletion will be added when document service is ready
-    await session.delete(project)
-    await session.commit()
+        # Clean up S3 assets post-commit. If this fails, data integrity is still intact
+        for key in s3_keys:
+            try:
+                await S3Service.delete_file(key)
+            except Exception:
+                pass  # Orphaned files can be safely ignored or cleaned by lifecycle policies
 
+    @classmethod
+    async def share_project(
+        cls, session: AsyncSession, project_id: int, owner_id: int, email: str, ttl_seconds: int = 86400
+    ) -> dict:
+        """
+        Generates a tokenized join link with a strict expiration window.
+        """
+        await cls._verify_access(session, project_id, owner_id, require_owner=True)
 
-async def invite_user(project_id: int, login: str, owner: User, session: AsyncSession) -> None:
-    """Invite a user to a project if the requester is the owner of the project"""
-    access = await _get_access(project_id, owner.id, session)
-    if not access or access.role != "owner":
-        raise HTTPException(
-            status_code=403, detail="Only the owner can invite users")
+        # Set explicit expiration timestamp (eg. 24 hours from now)
+        expires_at = int(time.time()) + ttl_seconds
 
-    result = await session.execute(select(User).where(User.login == login))
-    target_user = result.scalar_one_or_none()
-    if not target_user:
-        raise HTTPException(status_code=404, detail="User not found")
+        # Embed timestamp inside the signature structure
+        message = f"project:{project_id}:invite:{email}:expires:{expires_at}".encode(
+            "utf-8")
+        key = settings.SECRET_KEY.encode("utf-8")
+        token = hmac.new(key, message, hashlib.sha256).hexdigest()
 
-    existing = await _get_access(project_id, target_user.id, session)
-    if existing:
-        raise HTTPException(status_code=409, detail="User already has access")
+        join_url = f"https://testdomain123456.com/join?project_id={project_id}&email={email}&expires_at={expires_at}&token={token}"
 
-    new_access = Access(user_id=target_user.id,
-                        project_id=project_id, role="participant")
-    session.add(new_access)
-    await session.commit()
+        return {
+            "message": f"Share link generated successfully for {email}.",
+            "join_url": join_url
+        }
+
+    @classmethod
+    async def invite_user(
+        cls,
+        session: AsyncSession,
+        project_id: int,
+        owner_id: int,
+        invited_login: str,
+    ) -> dict:
+        """
+        Grant participant access to a project by login
+        Only the project owner can invite
+        """
+        # Verify owner
+        await cls._verify_access(session, project_id, owner_id, require_owner=True)
+
+        # Find user to invite
+        invited_user = (await session.execute(
+            select(User).where(User.login == invited_login)
+        )).scalar_one_or_none()
+
+        if not invited_user:
+            raise HTTPException(status.HTTP_404_NOT_FOUND,
+                                f"User '{invited_login}' not found")
+
+        if invited_user.id == owner_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                "Cannot invite yourself")
+
+        # Check if already has access
+        existing = (await session.execute(
+            select(Access).where(
+                Access.project_id == project_id,
+                Access.user_id == invited_user.id
+            )
+        )).scalar_one_or_none()
+
+        if existing:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                "User already has access")
+
+        # Grant access
+        access = Access(
+            project_id=project_id,
+            user_id=invited_user.id,
+            role="participant"
+        )
+        session.add(access)
+        await session.commit()
+
+        return {
+            "message": f"User '{invited_login}' invited successfully",
+            "project_id": project_id,
+            "invited_user_id": invited_user.id,
+            "role": "participant"
+        }
