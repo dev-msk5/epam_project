@@ -39,8 +39,8 @@ A backend service for managing projects and their documents. Users can create pr
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/your-username/project-dashboard.git
-cd project-dashboard
+git clone https://github.com/dev-msk5/epam_project.git
+cd epam_project
 ```
 
 ### 2. Create `.env` file
@@ -188,7 +188,7 @@ Request → extract JWT → get user_id
 
 ### S3 Bucket
 1. Create bucket (e.g., `project-dashboard-documents`)
-2. Block all public access ✅
+2. Block all public access
 3. Region must match Lambda region
 
 ### Lambda Function
