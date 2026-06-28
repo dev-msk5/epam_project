@@ -35,55 +35,64 @@ class test_token_expiry():
 
 
 async def test_register_user_success(client: AsyncClient, db_session: AsyncSession):
-    """Verify registration succeeds and password safety properties are maintained"""
+    """Verify registration succeeds and password safety is maintained"""
     payload = {
         "login": "new_register_user",  # >= 8 characters
         "password": "SecurePassword123!",  # >= 8 characters
         "repeat_password": "SecurePassword123!"
     }
     response = await client.post("/auth", json=payload)
-    assert response.status_code in [
-        200, 201], " Registration should succeed with 200 or 201"
+    assert response.status_code in [200, 201], (
+        "Registration should succeed with 200 or 201"
+    )
 
     # Assert DB registration & password safety properties
     stmt = select(User).where(User.login == "new_register_user")
     db_user = (await db_session.execute(stmt)).scalar_one_or_none()
     assert db_user is not None, "User should be created in the database"
     # Never store raw text
-    assert db_user.hashed_password != "SecurePassword123!", "Hashed password should not match the plain text password"
-    assert verify_password("SecurePassword123!",
-                           db_user.hashed_password) is True, "Password verification should succeed with the correct password"
+    assert db_user.hashed_password != "SecurePassword123!", (
+        "Hashed password should not match the plain text password"
+    )
+    assert verify_password(
+        "SecurePassword123!", db_user.hashed_password
+    ) is True, "Password verification should succeed with the correct password"
 
 
 async def test_register_user_password_mismatch(client: AsyncClient):
-    """Verify custom passwords_match validator rejects mismatches with 422."""
+    """Verify custom passwords_match rejects mismatches with 422"""
     payload = {
         "login": "different_passwords",
         "password": "SecurePassword123!",
         "repeat_password": "WrongPassword456!"
     }
     response = await client.post("/auth", json=payload)
-    assert response.status_code == 422, " Registration should fail with 422 for password mismatch"
+    assert response.status_code == 422, (
+        "Registration should fail with 422 for password mismatch"
+    )
 
     # Check that custom validation error message is delivered
     data = response.json()
     assert "Passwords do not match" in str(
-        data["detail"]), " Custom validator should indicate password mismatch"
+        data["detail"]
+    ), "Custom validator should indicate password mismatch"
 
 
 async def test_register_user_short_login(client: AsyncClient):
-    """Verify schema min_length=8 constraints for logins are enforced (422)"""
+    """Verify schema min_length=8 constraints for logins are enforced"""
     payload = {
         "login": "short",  # Under 8 characters
         "password": "SecurePassword123!",
         "repeat_password": "SecurePassword123!"
     }
     response = await client.post("/auth", json=payload)
-    assert response.status_code == 422, " Registration should fail with 422 for short login"
+    assert response.status_code == 422, (
+        "Registration should fail with 422 for short login"
+    )
 
 
 async def test_login_success(client: AsyncClient, test_owner: User):
-    """Verify active bearer token is generated with correct fields (TokenOut schema)"""
+    """Verify bearer token fields match the TokenOut schema"""
     payload = {
         "login": "owner_user_test",
         "password": "StrongPassword123!"
@@ -91,8 +100,12 @@ async def test_login_success(client: AsyncClient, test_owner: User):
     response = await client.post("/login", json=payload)
     assert response.status_code == 200, "Login should succeed with 200"
     data = response.json()
-    assert data["access_token"] is not None, "Access token should be present in the response"
-    assert data["token_type"] == "bearer", "Token type should be 'bearer' for JWT authentication"
+    assert data["access_token"] is not None, (
+        "Access token should be present in the response"
+    )
+    assert data["token_type"] == "bearer", (
+        "Token type should be 'bearer' for JWT authentication"
+    )
 
 
 async def test_login_invalid_password(client: AsyncClient, test_owner: User):
@@ -102,10 +115,14 @@ async def test_login_invalid_password(client: AsyncClient, test_owner: User):
         "password": "wrongpassword"
     }
     response = await client.post("/login", json=payload)
-    assert response.status_code == 401, "Login should fail with 401 for invalid credentials"
+    assert response.status_code == 401, (
+        "Login should fail with 401 for invalid credentials"
+    )
 
 
 async def test_jwt_protected_route_requires_token(client: AsyncClient):
     """Verify secure endpoints reject unauthenticated requests with 401"""
     response = await client.get("/projects")
-    assert response.status_code == 401, "Unauthenticated requests should be rejected with 401"
+    assert response.status_code == 401, (
+        "Unauthenticated requests should be rejected with 401"
+    )

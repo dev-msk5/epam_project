@@ -10,14 +10,16 @@ if TYPE_CHECKING:
 
 
 class Access(Base):
-    """Access model representing the relationship between users and projects, with a specific role assigned to each user for a project"""
+    """Relationship between users and projects with a per-project role"""
     __tablename__ = "access"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"),
-                                         nullable=False, index=True)
-    project_id: Mapped[int] = mapped_column(Integer, ForeignKey("projects.id"),
-                                            nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False, index=True
+    )
+    project_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("projects.id"), nullable=False, index=True
+    )
     role: Mapped[str] = mapped_column(String, nullable=False)
 
     user: Mapped["User"] = relationship(

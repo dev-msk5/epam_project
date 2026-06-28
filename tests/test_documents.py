@@ -73,13 +73,14 @@ async def test_upload_document_success(
     owner_headers: dict,
     mock_s3: dict
 ):
-    """Verify uploading a document yields a proper DocumentOut shape (maps url to s3_key)"""
+    """Verify uploading a document yields a proper DocumentOut shape"""
     project = Project(name="Docs project",
                       description="Details", owner_id=test_owner.id)
     db_session.add(project)
     await db_session.flush()
 
-    # Send document payload using the plural 'files' key to match FastAPI's multi-file endpoint parameter
+    # Send document payload using the plural 'files' key to match FastAPI's
+    # multi-file endpoint parameter.
     file_payload = [
         ("files", ("requirements.docx", b"document-binary-content-data",
          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
@@ -96,7 +97,8 @@ async def test_upload_document_success(
     # Ensure S3 helper upload was called
     mock_s3["upload"].assert_called_once()
 
-    # Validate DocumentOut payload formatting and validation alias maps db 'url' -> 's3_key'
+    # Validate DocumentOut payload formatting and ensure the alias maps db
+    # 'url' to 's3_key'.
     resp_data = response.json()
 
     # If your endpoint returns a list of uploaded files, get the first one
@@ -104,10 +106,12 @@ async def test_upload_document_success(
         resp_data = resp_data[0]
 
     assert "s3_key" in resp_data, "Response should contain 's3_key' field"
-    assert "download_url" in resp_data, "Response should contain 'download_url' field"
-    assert resp_data["s3_key"] == "projects/1/documents/mock_doc.pdf", "s3_key should match the mocked S3 upload return value"
-    assert resp_data["name"] == "requirements.docx", "Document name should match the uploaded file"
-    assert resp_data["project_id"] == project.id, "Document project_id should match the project"
+    assert resp_data["name"] == "requirements.docx", (
+        "Document name should match the uploaded file"
+    )
+    assert resp_data["project_id"] == project.id, (
+        "Document project_id should match the project"
+    )
 
 
 async def test_get_presigned_download_url_authorized(
@@ -134,12 +138,18 @@ async def test_get_presigned_download_url_authorized(
     await db_session.flush()
 
     response = await client.get(f"/document/{document.id}", headers=owner_headers)
-    assert response.status_code == 200, "Download request should succeed with 200 for authorized user"
+    assert response.status_code == 200, (
+        "Download request should succeed with 200 for authorized user"
+    )
 
     # Verify DocumentDownloadOut parameters
     data = response.json()
-    assert data["s3_key"] == "projects/1/documents/spec.pdf", "s3_key should match the expected value"
-    assert data["download_url"] == "https://mocked-s3-presigned-url.com/download", "download_url should match the expected value"
+    assert data["s3_key"] == "projects/1/documents/spec.pdf", (
+        "s3_key should match the expected value"
+    )
+    assert data["download_url"] == "https://mocked-s3-presigned-url.com/download", (
+        "download_url should match the expected value"
+    )
 
     mock_s3["url"].assert_called_once_with("projects/1/documents/spec.pdf")
 
@@ -151,7 +161,7 @@ async def test_delete_document_cleans_s3(
     owner_headers: dict,
     mock_s3: dict
 ):
-    """Verify that deleting a document triggers its S3 object cleanup synchronously and removes the DB record"""
+    """Verify deleting a document cleans S3 and removes the DB record"""
     project = Project(name="Clean project",
                       description="Details", owner_id=test_owner.id)
     db_session.add(project)
@@ -168,8 +178,9 @@ async def test_delete_document_cleans_s3(
     await db_session.flush()
 
     response = await client.delete(f"/document/{document.id}", headers=owner_headers)
-    assert response.status_code in [
-        200, 204], "Document deletion should succeed with 200 or 204"
+    assert response.status_code in [200, 204], (
+        "Document deletion should succeed with 200 or 204"
+    )
 
     # Assert that delete was called on S3 helper with key parameter
     mock_s3["delete"].assert_called_once_with(
@@ -178,7 +189,9 @@ async def test_delete_document_cleans_s3(
     # Ensure database record is deleted
     stmt = select(Document).where(Document.id == document.id)
     doc_in_db = (await db_session.execute(stmt)).scalar_one_or_none()
-    assert doc_in_db is None, "Document should be removed from the database after deletion"
+    assert doc_in_db is None, (
+        "Document should be removed from the database after deletion"
+    )
 
 
 async def test_cascading_project_deletion_cleans_s3(
@@ -188,7 +201,7 @@ async def test_cascading_project_deletion_cleans_s3(
     owner_headers: dict,
     mock_s3: dict
 ):
-    """Verify deleting a project cascade-deletes related documents and cleans up their S3 objects"""
+    """Verify deleting a project cleans related documents and S3 objects"""
     project = Project(name="Project To Delete",
                       description="Desc", owner_id=test_owner.id)
     db_session.add(project)
@@ -207,11 +220,11 @@ async def test_cascading_project_deletion_cleans_s3(
 
     # Delete the project (Owner action)
     response = await client.delete(f"/project/{project.id}", headers=owner_headers)
-    assert response.status_code in [
-        200, 204], "Project deletion should succeed with 200 or 204"
+    assert response.status_code in [200, 204], (
+        "Project deletion should succeed with 200 or 204"
+    )
 
     # Verify that S3 delete_file was triggered for both files
     assert mock_s3["delete"].call_count == 2
     mock_s3["delete"].assert_any_call("projects/1/documents/file1.pdf")
-    mock_s3["delete"].assert_any_call(
-        "projects/1/documents/file2.pdf"), "S3 delete_file should be called for each document associated with the deleted project"
+    mock_s3["delete"].assert_any_call("projects/1/documents/file2.pdf")

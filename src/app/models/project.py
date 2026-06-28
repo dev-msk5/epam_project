@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class Project(Base):
-    """Project model representing a project owned by a user, with associated documents and access entries"""
+    """Project owned by a user with related documents and access entries"""
     __tablename__ = "projects"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

@@ -1,4 +1,4 @@
-import asyncio  # for testing asynchronous code using multiple async backends
+import asyncio  # for testing async code across multiple backends
 import gc
 import os
 import socket
@@ -52,7 +52,7 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 
 @pytest.fixture(scope="session")
 async def test_engine():
-    """Create a session-scoped async engine with NullPool to prevent closed-loop socket leaks"""
+    """Create a session-scoped async engine with NullPool"""
     engine = create_async_engine(
         TEST_DATABASE_URL,
         echo=False,
@@ -65,7 +65,7 @@ async def test_engine():
 
 @pytest.fixture(scope="session", autouse=True)
 async def setup_db(test_engine):
-    """Create all tables in the test database once per session, and drop them at the end"""
+    """Create all tables once per session and drop them at the end"""
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
@@ -108,7 +108,7 @@ def override_dependencies(db_session: AsyncSession):
 
 @pytest.fixture(scope="session", autouse=True)
 async def cleanup_event_loop_barrier():
-    """Ensure all background S3 or database connections are garbage collected before loop exit"""
+    """Ensure background S3 and DB connections are collected before exit"""
     yield
     gc.collect()
     await asyncio.sleep(0.1)
@@ -116,10 +116,12 @@ async def cleanup_event_loop_barrier():
 
 @pytest.fixture
 def mock_s3() -> Generator[dict[str, AsyncMock], None, None]:
-    """Mock out AWS S3 Service calls to ensure tests don't require internet or AWS credentials"""
-    with patch("app.s3.S3Service.upload_file", new_callable=AsyncMock) as mock_upload, \
-            patch("app.s3.S3Service.delete_file", new_callable=AsyncMock) as mock_delete, \
-            patch("app.s3.S3Service.generate_download_url") as mock_url:
+    """Mock AWS S3 calls so tests do not need internet or credentials."""
+    with (
+        patch("app.s3.S3Service.upload_file", new_callable=AsyncMock) as mock_upload,
+        patch("app.s3.S3Service.delete_file", new_callable=AsyncMock) as mock_delete,
+        patch("app.s3.S3Service.generate_download_url") as mock_url,
+    ):
 
         mock_upload.return_value = "projects/1/documents/mock_doc.pdf"
         mock_delete.return_value = None

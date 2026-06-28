@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 
 from app.config import settings
 
-# initialize with Argon2 as the primary hasher, and Bcrypt as fallback
+# Initialize Argon2 as the primary hasher and Bcrypt as fallback
 pwd_context = PasswordHash((
     Argon2Hasher(),
     BcryptHasher(),
@@ -26,8 +26,9 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def verify_and_update_password(plain: str, hashed: str) -> tuple[bool, str | None]:
     """
-    Verify password and check if it needs to be updated to a stronger algorithm
-    If yes, returns (True, new_hash). If verified but no update needed, returns (True, None)
+    Verify a password and upgrade the hash when a stronger algorithm is needed
+
+    Returns (True, new_hash) if an update is needed, otherwise (True, None)
     """
     return pwd_context.verify_and_update(plain, hashed)
 
