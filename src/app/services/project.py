@@ -69,9 +69,16 @@ class ProjectService:
             owner_id=owner_id,
         )
         session.add(new_project)
+        await session.flush()  # get new_project.id before creating Access row
+
+        owner_access = Access(
+            project_id=new_project.id,
+            user_id=owner_id,
+            role="owner",
+        )
+        session.add(owner_access)
         await session.commit()
 
-        # reload with documents loaded
         result = await session.execute(
             select(Project)
             .options(selectinload(Project.documents))
@@ -221,7 +228,7 @@ class ProjectService:
         )).scalar_one_or_none()
 
         if existing:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+            raise HTTPException(status.HTTP_409_CONFLICT,
                                 "User already has access")
 
         # Grant access

@@ -77,22 +77,23 @@ async def setup_db(test_engine):
 @pytest.fixture
 async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
     """
-    Provide a transaction-isolated database session
-    Every database action performed during a test is rolled back automatically
+    Provide a transaction-isolated database session for each test. 
+    Rolls back any changes after the test completes
     """
     async with test_engine.connect() as connection:
-        transaction = await connection.begin()
+        await connection.begin()
 
-        # Create a clean session bound to our current active connection
+        # bind the factory to the connection, not the engine
+        # this is the only line that changed from the broken version
         session_factory = async_sessionmaker(
-            test_engine,
+            bind=connection,
             expire_on_commit=False,
-            class_=AsyncSession
+            class_=AsyncSession,
         )
-        async with session_factory(bind=connection) as session:
+        async with session_factory() as session:
             yield session
 
-        await transaction.rollback()
+        await connection.rollback()
 
 
 @pytest.fixture(autouse=True)
@@ -143,7 +144,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         yield ac
 
 
-# --- Shared User Fixtures ---
+#  Shared User Fixtures
 
 @pytest.fixture
 async def test_owner(db_session: AsyncSession) -> User:
@@ -181,7 +182,13 @@ async def test_other_user(db_session: AsyncSession) -> User:
     return other
 
 
-# --- Authentication Header Fixtures ---
+# alias so tests can request either name
+@pytest.fixture
+async def other_user(test_other_user: User) -> User:
+    return test_other_user
+
+
+#  Authentication Header Fixtures
 
 @pytest.fixture
 def owner_headers(test_owner: User) -> dict[str, str]:

@@ -7,16 +7,29 @@
 - DELETE /document/<document_id>            (Delete document)
 """
 from typing import List
-from fastapi import APIRouter, Depends, UploadFile, File, Response, status
+from fastapi import APIRouter, Depends, UploadFile, File, Response, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_session
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.pydantic_schemas.document import DocumentOut, DocumentDownloadOut
-from app.services.document import DocumentService
+from app.services.document import DocumentService, ALLOWED_EXT
 
 router = APIRouter()
+
+
+def _validate_file_types(files: list[UploadFile]) -> None:
+    """Validate that all files have allowed extensions"""
+    for f in files:
+        name = (f.filename or "").rsplit(".", 1)
+        ext = f".{name[-1].lower()}" if len(name) == 2 else ""
+        if ext not in ALLOWED_EXT:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"File '{f.filename}' has unsupported type. "
+                f"Allowed: {sorted(ALLOWED_EXT)}"
+            )
 
 
 @router.get("/project/{project_id}/documents", response_model=List[DocumentOut], status_code=status.HTTP_200_OK)
@@ -33,14 +46,19 @@ async def get_project_docs(
     )
 
 
-@router.post("/project/{project_id}/documents", response_model=List[DocumentOut], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/project/{project_id}/documents",
+    response_model=List[DocumentOut],
+    status_code=status.HTTP_201_CREATED
+)
 async def post_project_docs(
     project_id: int,
     files: List[UploadFile] = File(...),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Upload one or more documents to a specific project. User must have access to the project"""
+    """Upload one or more documents to a specific project. User must have access"""
+    _validate_file_types(files)
     return await DocumentService.upload_documents(
         session=session,
         project_id=project_id,
@@ -67,6 +85,7 @@ async def put_document(
     current_user: User = Depends(get_current_user)
 ):
     """Update a specific document. User must have access to the document"""
+    _validate_file_types([file])
     return await DocumentService.update_document(
         session=session,
         document_id=document_id,
