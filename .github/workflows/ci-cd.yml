@@ -57,8 +57,8 @@ jobs:
 
     env:
       DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_db
-      JWT_SECRET_KEY: ci-test-secret-key-not-for-production-use-only-32bytes-safe
-      JWT_EXPIRE_MINUTES: 60
+      SECRET_KEY: ci-test-secret-key-not-for-production-use-only-32bytes-safe
+      ACCESS_TOKEN_EXPIRE_MINUTES: 60
       AWS_ACCESS_KEY_ID: testing        # needed by boto3, intercepted by moto
       AWS_SECRET_ACCESS_KEY: testing
       AWS_DEFAULT_REGION: us-east-1
