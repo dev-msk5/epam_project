@@ -25,11 +25,7 @@ DATABASE_URL = settings.DATABASE_URL
 
 if "postgresql+asyncpg://" in DATABASE_URL:
     base_url, db_name = DATABASE_URL.rsplit("/", 1)
-    if (
-        db_name == "test_db"
-        or db_name.endswith("_test")
-        or db_name.endswith("test")
-    ):
+    if db_name == "test_db" or db_name.endswith("_test") or db_name.endswith("test"):
         TEST_DATABASE_URL = DATABASE_URL
     else:
         TEST_DATABASE_URL = f"{base_url}/{db_name}_test"
@@ -62,6 +58,7 @@ async def test_engine():
 
 # Schema lifecycle - drop/create once per session
 
+
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_db(test_engine):
     """Drop + create all tables once at session start, drop at session end."""
@@ -74,6 +71,7 @@ async def setup_db(test_engine):
 
 
 # Per-test DB session, each test gets a fresh rollbacked transation
+
 
 @pytest_asyncio.fixture  # function scope (default)
 async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
@@ -97,6 +95,7 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
 
 # FastAPI dependency override
 
+
 @pytest.fixture(autouse=True)
 def override_dependencies(db_session: AsyncSession):
     """Swap get_session for the per-test rollback session on every test."""
@@ -110,6 +109,7 @@ def override_dependencies(db_session: AsyncSession):
 
 
 # Cleanup barrier
+
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def cleanup_event_loop_barrier():
