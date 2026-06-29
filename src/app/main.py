@@ -1,8 +1,9 @@
 from contextlib import asynccontextmanager
 
-from argon2 import hash_password
 from fastapi import Depends, FastAPI
-from sqlalchemy import delete, select, text
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import engine, get_session, init_db
@@ -10,18 +11,16 @@ from app.models.document import Document
 from app.models.project import Project
 from app.models.user import User
 from app.routes import auth, documents, projects
+from app.security import get_password_hash
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Context manager for the application lifespan
-    """
-    # start
+    """Context manager for the application lifespan"""
     await init_db()
 
     async with AsyncSession(engine) as session:
-        # Check if test_user already exists
+        # Seed: test_user
         result = await session.execute(select(User).where(User.login == "test_user"))
         existing_user = result.scalar_one_or_none()
 
@@ -30,15 +29,12 @@ async def lifespan(app: FastAPI):
         else:
             new_user = User(
                 login="test_user",
-                hashed_password=hash_password(
-                    # expects bytes , then decode to str for database storage
-                    "test_password".encode()
-                ).decode(),
+                hashed_password=get_password_hash("test_password"),
             )
             session.add(new_user)
             await session.flush()
 
-        # Check if Test Project already exists for this user
+        # Seed: Test Project
         result = await session.execute(
             select(Project).where(
                 (Project.name == "Test Project") & (Project.owner_id == new_user.id)
@@ -57,7 +53,7 @@ async def lifespan(app: FastAPI):
             session.add(new_project)
             await session.flush()
 
-        # Check if Test Document already exists for this project
+        # Seed: Test Document
         result = await session.execute(
             select(Document).where(
                 (Document.name == "Test Document")
@@ -71,48 +67,36 @@ async def lifespan(app: FastAPI):
                 name="Test Document",
                 project_id=new_project.id,
                 url="http://example.com/test_document",
-                created_at=text("CURRENT_TIMESTAMP"),
-                updated_at=text("CURRENT_TIMESTAMP"),
                 owner_id=new_user.id,
             )
             session.add(new_document)
 
         await session.commit()
 
-    # APP runs
+    # App runs
     yield
-
-    # cleanup after shutdown
-    async with AsyncSession(engine) as session:
-        await session.execute(delete(Document))
-        await session.execute(delete(Project))
-        await session.execute(delete(User))
-        await session.commit()
 
 
 app = FastAPI(title="Project Dashboard", lifespan=lifespan)
 
-# Routing from router/ folder to app
+# Routers
 app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(documents.router)
 
-
-@app.get("/")
-async def root():
-    """Root endpoint for the Project Dashboard API"""
-    return {"message": "Welcome to the Project Dashboard API"}
+# Frontend after API routers, serving static files from the /frontend directory
+app.mount("/", StaticFiles(directory="src/frontend", html=True), name="static")
 
 
 @app.get("/health")
 async def health():
-    """Health check endpoint for the Project Dashboard API"""
+    """Health check."""
     return {"status": "ok"}
 
 
 @app.get("/health/db")
 async def health_db(db: AsyncSession = Depends(get_session)):
-    """Health check endpoint for the database connection"""
+    """Database connectivity check."""
     try:
         await db.execute(text("SELECT 1"))
         return {"status": "ok", "database": "connected"}
