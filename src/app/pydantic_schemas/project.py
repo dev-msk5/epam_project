@@ -14,7 +14,8 @@ class ProjectCreate(BaseModel):
     name: Annotated[str, Field(min_length=4, max_length=100)]
     description: Annotated[str, Field(max_length=200)]
 
-    # to avoid | None issues we declare without Annotation, we use default_factory to create empty lists and dicts, so not 1 mutual gets modified across instances
+    # to avoid | None issues we declare without Annotation, we use default_factory
+    # to create empty lists and dicts, not 1 mutual gets modified across instances
     invited_users: list[UserOut] | None = Field(default_factory=list)
     documents: list[DocumentOut] | None = Field(default_factory=list)
 

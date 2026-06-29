@@ -107,7 +107,8 @@ class ProjectService:
     async def get_project_details(
         cls, session: AsyncSession, project_id: int, user_id: int
     ) -> Project:
-        """Returns project details if the user has access, otherwise raises an HTTPException"""
+        """Returns project details if the user has access, 
+        otherwise raises an HTTPException"""
         await cls._verify_access(session, project_id, user_id)
         result = await session.execute(
             select(Project)
@@ -172,7 +173,8 @@ class ProjectService:
             try:
                 await S3Service.delete_file(key)
             except Exception:
-                pass  # Orphaned files can be safely ignored or cleaned by lifecycle policies
+                pass  # Orphaned files can be safely ignored,
+                # or cleaned by lifecycle policies
 
     @classmethod
     async def share_project(
@@ -231,7 +233,8 @@ class ProjectService:
             )
 
         if invited_user.id == owner_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot invite yourself")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                "Cannot invite yourself")
 
         # Check if already has access
         existing = (
@@ -243,7 +246,8 @@ class ProjectService:
         ).scalar_one_or_none()
 
         if existing:
-            raise HTTPException(status.HTTP_409_CONFLICT, "User already has access")
+            raise HTTPException(status.HTTP_409_CONFLICT,
+                                "User already has access")
 
         # Grant access
         access = Access(

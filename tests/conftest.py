@@ -52,7 +52,8 @@ async def test_engine():
     engine = create_async_engine(
         TEST_DATABASE_URL,
         echo=False,
-        poolclass=NullPool,  # Prevents connections from being pooled across closed loops
+        poolclass=NullPool,
+        # Prevents connections from being pooled across closed loops
     )
     yield engine
     # Explicitly clean up all engine resources on teardown
