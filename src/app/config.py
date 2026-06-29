@@ -1,10 +1,12 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
 # Pydantic settings, reads from .env
 # Keep this aligned with the .env file
 
 
 class Settings(BaseSettings):
     """Read configuration from environment variables and .env files"""
+
     DATABASE_URL: str
     SECRET_KEY: str
     ALGORITHM: str = "HS256"

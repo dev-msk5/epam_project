@@ -1,12 +1,14 @@
 # src/app/pydantic_schemas/user.py
 
 from datetime import datetime
-from pydantic import BaseModel, Field, PositiveInt, ConfigDict, model_validator
 from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 
 class UserCreate(BaseModel):
     """Pydantic model for creating a new user, for POST requests"""
+
     login: Annotated[str, Field(min_length=8, max_length=100)]
     password: Annotated[str, Field(min_length=8, max_length=100)]
     repeat_password: Annotated[str, Field(min_length=8, max_length=100)]
@@ -22,6 +24,7 @@ class UserCreate(BaseModel):
 
 class UserLogin(BaseModel):
     """Pydantic model for user login, for POST requests"""
+
     login: Annotated[str, Field(min_length=8, max_length=100)]
     password: Annotated[str, Field(min_length=8, max_length=100)]
 
@@ -30,6 +33,7 @@ class UserLogin(BaseModel):
 
 class UserUpdate(BaseModel):
     """Pydantic model for updating an existing user, for PUT requests"""
+
     login: Annotated[str, Field(max_length=100)] | None = None
     password: Annotated[str, Field(min_length=8, max_length=100)] | None = None
 
@@ -38,6 +42,7 @@ class UserUpdate(BaseModel):
 
 class UserOut(BaseModel):
     """Pydantic model for returning user data, for GET requests"""
+
     id: PositiveInt
     login: Annotated[str, Field(max_length=100)]
     created_at: datetime

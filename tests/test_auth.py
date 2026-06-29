@@ -28,7 +28,6 @@
 from datetime import datetime, timedelta, timezone
 
 import jwt
-import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -37,14 +36,14 @@ from app.config import settings
 from app.models.user import User
 from app.security import verify_password
 
-
 # registration
+
 
 async def test_register_user_success(client: AsyncClient, db_session: AsyncSession):
     payload = {
         "login": "new_register_user",
         "password": "SecurePassword123!",
-        "repeat_password": "SecurePassword123!"
+        "repeat_password": "SecurePassword123!",
     }
     response = await client.post("/auth", json=payload)
     assert response.status_code in [200, 201], "registration should succeed"
@@ -55,17 +54,20 @@ async def test_register_user_success(client: AsyncClient, db_session: AsyncSessi
     assert db_user.hashed_password != "SecurePassword123!", (
         "password must not be stored in plaintext"
     )
-    assert verify_password(
-        "SecurePassword123!",
-        db_user.hashed_password,
-    ) is True, "stored hash should verify the original password"
+    assert (
+        verify_password(
+            "SecurePassword123!",
+            db_user.hashed_password,
+        )
+        is True
+    ), "stored hash should verify the original password"
 
 
 async def test_register_returns_user_data(client: AsyncClient):
     payload = {
         "login": "data_check_user",
         "password": "SecurePassword123!",
-        "repeat_password": "SecurePassword123!"
+        "repeat_password": "SecurePassword123!",
     }
     response = await client.post("/auth", json=payload)
     assert response.status_code in [200, 201], "registration should succeed"
@@ -75,16 +77,14 @@ async def test_register_returns_user_data(client: AsyncClient):
         "response should return the created login"
     )
     assert "password" not in data, "password must not appear in response"
-    assert "hashed_password" not in data, (
-        "hashed password must not appear in response"
-    )
+    assert "hashed_password" not in data, "hashed password must not appear in response"
 
 
 async def test_register_password_mismatch(client: AsyncClient):
     payload = {
         "login": "different_passwords",
         "password": "SecurePassword123!",
-        "repeat_password": "WrongPassword456!"
+        "repeat_password": "WrongPassword456!",
     }
     response = await client.post("/auth", json=payload)
     assert response.status_code == 422, "password mismatch should fail"
@@ -99,7 +99,7 @@ async def test_register_short_login(client: AsyncClient):
     payload = {
         "login": "short",
         "password": "SecurePassword123!",
-        "repeat_password": "SecurePassword123!"
+        "repeat_password": "SecurePassword123!",
     }
     response = await client.post("/auth", json=payload)
     assert response.status_code == 422, "short login should fail"
@@ -109,7 +109,7 @@ async def test_register_short_password(client: AsyncClient):
     payload = {
         "login": "validlogin_user",
         "password": "short",
-        "repeat_password": "short"
+        "repeat_password": "short",
     }
     response = await client.post("/auth", json=payload)
     assert response.status_code == 422, "short password should fail"
@@ -120,7 +120,7 @@ async def test_register_duplicate_login(client: AsyncClient, test_owner: User):
     payload = {
         "login": "owner_user_test",
         "password": "StrongPassword123!",
-        "repeat_password": "StrongPassword123!"
+        "repeat_password": "StrongPassword123!",
     }
     response = await client.post("/auth", json=payload)
     assert response.status_code == 409, "duplicate login should fail"
@@ -129,37 +129,29 @@ async def test_register_duplicate_login(client: AsyncClient, test_owner: User):
 async def test_register_missing_login(client: AsyncClient):
     payload = {
         "password": "SecurePassword123!",
-        "repeat_password": "SecurePassword123!"
+        "repeat_password": "SecurePassword123!",
     }
     response = await client.post("/auth", json=payload)
     assert response.status_code == 422, "missing login should fail"
 
 
 async def test_register_missing_password(client: AsyncClient):
-    payload = {
-        "login": "some_valid_user",
-        "repeat_password": "SecurePassword123!"
-    }
+    payload = {"login": "some_valid_user", "repeat_password": "SecurePassword123!"}
     response = await client.post("/auth", json=payload)
     assert response.status_code == 422, "missing password should fail"
 
 
 async def test_register_missing_repeat_password(client: AsyncClient):
-    payload = {
-        "login": "another_valid_user",
-        "password": "SecurePassword123!"
-    }
+    payload = {"login": "another_valid_user", "password": "SecurePassword123!"}
     response = await client.post("/auth", json=payload)
     assert response.status_code == 422, "missing repeat password should fail"
 
 
 # login
 
+
 async def test_login_success(client: AsyncClient, test_owner: User):
-    payload = {
-        "login": "owner_user_test",
-        "password": "StrongPassword123!"
-    }
+    payload = {"login": "owner_user_test", "password": "StrongPassword123!"}
     response = await client.post("/login", json=payload)
     assert response.status_code == 200, "login should succeed"
 
@@ -169,20 +161,13 @@ async def test_login_success(client: AsyncClient, test_owner: User):
     assert len(data["access_token"]) > 0, "access token should not be empty"
 
 
-async def test_login_token_contains_user_id(
-    client: AsyncClient,
-    test_owner: User
-):
+async def test_login_token_contains_user_id(client: AsyncClient, test_owner: User):
     payload = {"login": "owner_user_test", "password": "StrongPassword123!"}
     response = await client.post("/login", json=payload)
     assert response.status_code == 200, "login should succeed"
 
     token = response.json()["access_token"]
-    decoded = jwt.decode(
-        token,
-        settings.SECRET_KEY,
-        algorithms=[settings.ALGORITHM]
-    )
+    decoded = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
     assert decoded["sub"] == str(test_owner.id), (
         "token subject should match the owner id"
     )
@@ -214,9 +199,9 @@ async def test_login_missing_login(client: AsyncClient):
 
 # token behavior on protected routes
 
+
 async def test_valid_token_accepted_on_protected_route(
-    client: AsyncClient,
-    owner_headers: dict
+    client: AsyncClient, owner_headers: dict
 ):
     response = await client.get("/projects", headers=owner_headers)
     assert response.status_code == 200, "valid token should be accepted"
@@ -236,12 +221,10 @@ async def test_malformed_token_returns_401(client: AsyncClient):
 async def test_expired_token_returns_401(client: AsyncClient):
     expired_payload = {
         "sub": "1",
-        "exp": datetime.now(timezone.utc) - timedelta(seconds=10)
+        "exp": datetime.now(timezone.utc) - timedelta(seconds=10),
     }
     token = jwt.encode(
-        expired_payload,
-        settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM
+        expired_payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM
     )
     headers = {"Authorization": f"Bearer {token}"}
     response = await client.get("/projects", headers=headers)
@@ -252,10 +235,10 @@ async def test_tampered_token_returns_401(client: AsyncClient, test_owner: User)
     token = jwt.encode(
         {
             "sub": str(test_owner.id),
-            "exp": datetime.now(timezone.utc) + timedelta(minutes=30)
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=30),
         },
         "super-test-secret-key-not-for-production-use-only-32bytes",
-        algorithm=settings.ALGORITHM
+        algorithm=settings.ALGORITHM,
     )
     headers = {"Authorization": f"Bearer {token}"}
     response = await client.get("/projects", headers=headers)

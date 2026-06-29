@@ -1,17 +1,20 @@
-import jwt
 from datetime import datetime, timedelta, timezone
+
+import jwt
+from fastapi import HTTPException, status
 from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 from pwdlib.hashers.bcrypt import BcryptHasher
-from fastapi import HTTPException, status
 
 from app.config import settings
 
 # Initialize Argon2 as the primary hasher and Bcrypt as fallback
-pwd_context = PasswordHash((
-    Argon2Hasher(),
-    BcryptHasher(),
-))
+pwd_context = PasswordHash(
+    (
+        Argon2Hasher(),
+        BcryptHasher(),
+    )
+)
 
 
 def get_password_hash(password: str) -> str:
@@ -38,10 +41,7 @@ def create_access_token(user_id: int) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
-    payload = {
-        "sub": str(user_id),
-        "exp": expire
-    }
+    payload = {"sub": str(user_id), "exp": expire}
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
@@ -52,9 +52,7 @@ def decode_access_token(token: str) -> int:
     """
     try:
         payload = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM]
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
         )
         user_id_str = payload.get("sub")
         if user_id_str is None:

@@ -20,58 +20,66 @@
 #   require_owner            - matching user_id passes silently
 #                            - different user_id raises 403
 
-import pytest
-import jwt
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
+import jwt
+import pytest
 from fastapi import HTTPException
 
+from app.config import settings
+from app.dependencies import get_current_user, require_owner
 from app.security import (
-    get_password_hash,
-    verify_password,
-    verify_and_update_password,
     create_access_token,
     decode_access_token,
+    get_password_hash,
+    verify_and_update_password,
+    verify_password,
 )
-from app.dependencies import get_current_user, require_owner
-from app.config import settings
-
 
 # get_password_hash
 
+
 def test_hash_is_not_plaintext():
     hashed = get_password_hash("MySecret123!")
-    assert hashed != "MySecret123!", " Hashed password should not match the plain text password"
+    assert hashed != "MySecret123!", (
+        " Hashed password should not match the plain text password"
+    )
 
 
 def test_hash_is_string():
     hashed = get_password_hash("MySecret123!")
-    assert isinstance(hashed, str) and len(
-        hashed) > 0, " Hashed password should be a non-empty string"
+    assert isinstance(hashed, str) and len(hashed) > 0, (
+        " Hashed password should be a non-empty string"
+    )
 
 
 # verify_password
 
+
 def test_verify_password_correct():
     hashed = get_password_hash("CorrectHorse99!")
-    assert verify_password(
-        "CorrectHorse99!", hashed) is True, " Password verification should succeed with the correct password"
+    assert verify_password("CorrectHorse99!", hashed) is True, (
+        " Password verification should succeed with the correct password"
+    )
 
 
 def test_verify_password_wrong():
     hashed = get_password_hash("CorrectHorse99!")
-    assert verify_password(
-        "WrongPassword!", hashed) is False, " Password verification should fail with the wrong password"
+    assert verify_password("WrongPassword!", hashed) is False, (
+        " Password verification should fail with the wrong password"
+    )
 
 
 def test_verify_password_empty_string_fails():
     hashed = get_password_hash("SomePassword1!")
-    assert verify_password(
-        "", hashed) is False, " Password verification should fail with an empty password"
+    assert verify_password("", hashed) is False, (
+        " Password verification should fail with an empty password"
+    )
 
 
 # verify_and_update_password
+
 
 def test_verify_and_update_bcrypt_triggers_upgrade():
     # Produce a bcrypt hash directly so the upgrade path is exercised
@@ -81,13 +89,16 @@ def test_verify_and_update_bcrypt_triggers_upgrade():
     bcrypt_only = PasswordHash((BcryptHasher(),))
     bcrypt_hash = bcrypt_only.hash("OldBcryptPass1!")
 
-    valid, new_hash = verify_and_update_password(
-        "OldBcryptPass1!", bcrypt_hash)
+    valid, new_hash = verify_and_update_password("OldBcryptPass1!", bcrypt_hash)
 
-    assert valid is True, "Password verification should succeed with the correct password"
+    assert valid is True, (
+        "Password verification should succeed with the correct password"
+    )
     # When the primary hasher (Argon2) is stronger, pwdlib returns a new hash
     assert new_hash is not None, "A bcrypt hash should trigger an upgrade to Argon2"
-    assert new_hash != bcrypt_hash, "The new hash should be different from the old bcrypt hash"
+    assert new_hash != bcrypt_hash, (
+        "The new hash should be different from the old bcrypt hash"
+    )
 
 
 def test_verify_and_update_argon2_no_upgrade_needed():
@@ -95,7 +106,9 @@ def test_verify_and_update_argon2_no_upgrade_needed():
 
     valid, new_hash = verify_and_update_password("AlreadyArgon2!", argon2_hash)
 
-    assert valid is True, "Password verification should succeed with the correct password"
+    assert valid is True, (
+        "Password verification should succeed with the correct password"
+    )
     # Already using the strongest hasher
     assert new_hash is None, "No upgrade needed if already using the strongest hasher"
 
@@ -110,33 +123,30 @@ def test_verify_and_update_wrong_password():
 
 # create_access_token
 
+
 def test_create_access_token_returns_string():
     token = create_access_token(user_id=42)
-    assert isinstance(token, str) and len(
-        token) > 0, "Access token should be a non-empty string"
+    assert isinstance(token, str) and len(token) > 0, (
+        "Access token should be a non-empty string"
+    )
 
 
 def test_create_access_token_contains_correct_user_id():
     token = create_access_token(user_id=7)
-    payload = jwt.decode(
-        token,
-        settings.SECRET_KEY,
-        algorithms=[settings.ALGORITHM]
+    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    assert payload["sub"] == "7", (
+        "Decoded token payload should contain the correct user_id in 'sub'"
     )
-    assert payload["sub"] == "7", "Decoded token payload should contain the correct user_id in 'sub'"
 
 
 def test_create_access_token_has_expiry():
     token = create_access_token(user_id=1)
-    payload = jwt.decode(
-        token,
-        settings.SECRET_KEY,
-        algorithms=[settings.ALGORITHM]
-    )
+    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
     assert "exp" in payload, "Decoded token payload should contain an expiry time"
 
 
 #  decode_access_token
+
 
 def test_decode_valid_token_returns_user_id():
     token = create_access_token(user_id=99)
@@ -147,18 +157,17 @@ def test_decode_valid_token_returns_user_id():
 def test_decode_expired_token_raises_401():
     expired_payload = {
         "sub": "5",
-        "exp": datetime.now(timezone.utc) - timedelta(seconds=1)
+        "exp": datetime.now(timezone.utc) - timedelta(seconds=1),
     }
     token = jwt.encode(
-        expired_payload,
-        settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM
+        expired_payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM
     )
     with pytest.raises(HTTPException) as exc:
         decode_access_token(token)
     assert exc.value.status_code == 401, " Expired token should raise a 401 error"
-    assert "expired" in exc.value.detail.lower(
-    ), " Error message should indicate that the token has expired"
+    assert "expired" in exc.value.detail.lower(), (
+        " Error message should indicate that the token has expired"
+    )
 
 
 def test_decode_tampered_signature_raises_401():
@@ -181,40 +190,46 @@ def test_decode_missing_sub_raises_401():
         "exp": datetime.now(timezone.utc) + timedelta(minutes=30)
         # no "sub"
     }
-    token = jwt.encode(payload, settings.SECRET_KEY,
-                       algorithm=settings.ALGORITHM)
+    token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     with pytest.raises(HTTPException) as exc:
         decode_access_token(token)
-    assert exc.value.status_code == 401, "Token with missing 'sub' should raise a 401 error"
-    assert "credentials" in exc.value.detail.lower(
-    ), "Error message should indicate missing credentials"
+    assert exc.value.status_code == 401, (
+        "Token with missing 'sub' should raise a 401 error"
+    )
+    assert "credentials" in exc.value.detail.lower(), (
+        "Error message should indicate missing credentials"
+    )
 
 
 def test_decode_non_numeric_sub_raises_401():
     payload = {
         "sub": "not-a-number",
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=30)
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=30),
     }
-    token = jwt.encode(payload, settings.SECRET_KEY,
-                       algorithm=settings.ALGORITHM)
+    token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     with pytest.raises(HTTPException) as exc:
         decode_access_token(token)
-    assert exc.value.status_code == 401, "Token with non-numeric 'sub' should raise a 401 error"
+    assert exc.value.status_code == 401, (
+        "Token with non-numeric 'sub' should raise a 401 error"
+    )
 
 
 def test_decode_wrong_secret_raises_401():
-    payload = {
-        "sub": "10",
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=30)
-    }
-    token = jwt.encode(payload, "super-test-secret-key-not-for-production-use-only-32bytes",
-                       algorithm=settings.ALGORITHM)
+    payload = {"sub": "10", "exp": datetime.now(timezone.utc) + timedelta(minutes=30)}
+    token = jwt.encode(
+        payload,
+        "super-test-secret-key-not-for-production-use-only-32bytes",
+        algorithm=settings.ALGORITHM,
+    )
     with pytest.raises(HTTPException) as exc:
         decode_access_token(token)
-    assert exc.value.status_code == 401, "Token with wrong secret should raise a 401 error"
+    assert exc.value.status_code == 401, (
+        "Token with wrong secret should raise a 401 error"
+    )
 
 
 #  get_current_user
+
 
 @pytest.mark.anyio
 async def test_get_current_user_returns_user_for_valid_token():
@@ -228,7 +243,9 @@ async def test_get_current_user_returns_user_for_valid_token():
 
     result = await get_current_user(token=token, db=mock_db)
 
-    assert result is mock_user, " get_current_user should return the user object for a valid token"
+    assert result is mock_user, (
+        " get_current_user should return the user object for a valid token"
+    )
     mock_db.get.assert_called_once()
 
 
@@ -244,20 +261,19 @@ async def test_get_current_user_deleted_user_raises_401():
         await get_current_user(token=token, db=mock_db)
 
     assert exc.value.status_code == 401, "Deleted user should raise a 401 error"
-    assert "no longer exists" in exc.value.detail.lower(
-    ), "Error message should indicate that the user no longer exists"
+    assert "no longer exists" in exc.value.detail.lower(), (
+        "Error message should indicate that the user no longer exists"
+    )
 
 
 @pytest.mark.anyio
 async def test_get_current_user_expired_token_raises_401():
     expired_payload = {
         "sub": "1",
-        "exp": datetime.now(timezone.utc) - timedelta(seconds=1)
+        "exp": datetime.now(timezone.utc) - timedelta(seconds=1),
     }
     token = jwt.encode(
-        expired_payload,
-        settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM
+        expired_payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM
     )
 
     mock_db = AsyncMock()
@@ -266,8 +282,9 @@ async def test_get_current_user_expired_token_raises_401():
         await get_current_user(token=token, db=mock_db)
 
     assert exc.value.status_code == 401, "Expired token should raise a 401 error"
-    assert "expired" in exc.value.detail.lower(
-    ), "Error message should indicate that the token has expired"
+    assert "expired" in exc.value.detail.lower(), (
+        "Error message should indicate that the token has expired"
+    )
 
 
 @pytest.mark.anyio
@@ -282,23 +299,24 @@ async def test_get_current_user_invalid_token_raises_401():
 
 @pytest.mark.anyio
 async def test_get_current_user_missing_sub_raises_401():
-    payload = {
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=30)
-    }
-    token = jwt.encode(payload, settings.SECRET_KEY,
-                       algorithm=settings.ALGORITHM)
+    payload = {"exp": datetime.now(timezone.utc) + timedelta(minutes=30)}
+    token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
     mock_db = AsyncMock()
 
     with pytest.raises(HTTPException) as exc:
         await get_current_user(token=token, db=mock_db)
 
-    assert exc.value.status_code == 401, "Token with missing 'sub' should raise a 401 error"
-    assert "invalid token payload" in exc.value.detail.lower(
-    ), "Error message should indicate invalid token payload"
+    assert exc.value.status_code == 401, (
+        "Token with missing 'sub' should raise a 401 error"
+    )
+    assert "invalid token payload" in exc.value.detail.lower(), (
+        "Error message should indicate invalid token payload"
+    )
 
 
 # require_owner
+
 
 def test_require_owner_passes_for_matching_user():
     mock_user = MagicMock()
@@ -314,9 +332,12 @@ def test_require_owner_raises_403_for_wrong_user():
     with pytest.raises(HTTPException) as exc:
         require_owner(project_owner_id=5, current_user=mock_user)
 
-    assert exc.value.status_code == 403, "require_owner should raise 403 for a user that is not the owner"
-    assert "owner" in exc.value.detail.lower(
-    ), " Error message should indicate that the user is not the owner"
+    assert exc.value.status_code == 403, (
+        "require_owner should raise 403 for a user that is not the owner"
+    )
+    assert "owner" in exc.value.detail.lower(), (
+        " Error message should indicate that the user is not the owner"
+    )
 
 
 def test_require_owner_raises_403_for_participant(
@@ -329,4 +350,6 @@ def test_require_owner_raises_403_for_participant(
     with pytest.raises(HTTPException) as exc:
         require_owner(project_owner_id=1, current_user=mock_participant)
 
-    assert exc.value.status_code == 403, " require_owner should raise 403 for a participant user that is not the owner"
+    assert exc.value.status_code == 403, (
+        " require_owner should raise 403 for a participant user that is not the owner"
+    )

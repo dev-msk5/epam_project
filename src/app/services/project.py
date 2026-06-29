@@ -1,25 +1,29 @@
-from sqlalchemy.orm import selectinload
-import time
-import hmac
 import hashlib
+import hmac
+import time
 from typing import List
-from sqlalchemy import select, or_, delete
-from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import HTTPException, status
 
-from app.models.project import Project
-from app.models.access import Access
-from app.models.user import User
-from app.models.document import Document
-from app.s3 import S3Service
-from app.pydantic_schemas.project import ProjectCreate, ProjectUpdate
+from fastapi import HTTPException, status
+from sqlalchemy import delete, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
 from app.config import settings
+from app.models.access import Access
+from app.models.document import Document
+from app.models.project import Project
+from app.models.user import User
+from app.pydantic_schemas.project import ProjectCreate, ProjectUpdate
+from app.s3 import S3Service
 
 
 class ProjectService:
     @staticmethod
     async def _verify_access(
-        session: AsyncSession, project_id: int, user_id: int, require_owner: bool = False
+        session: AsyncSession,
+        project_id: int,
+        user_id: int,
+        require_owner: bool = False,
     ) -> Project:
         """
         Internal access resolver. Returns the Project model if authorized.
@@ -45,8 +49,7 @@ class ProjectService:
 
         access_query = await session.execute(
             select(Access).where(
-                Access.project_id == project_id,
-                Access.user_id == user_id
+                Access.project_id == project_id, Access.user_id == user_id
             )
         )
         access_entry = access_query.scalar_one_or_none()
@@ -87,18 +90,15 @@ class ProjectService:
         return result.scalar_one()
 
     @classmethod
-    async def get_user_projects(cls, session: AsyncSession, user_id: int) -> List[Project]:
+    async def get_user_projects(
+        cls, session: AsyncSession, user_id: int
+    ) -> List[Project]:
         """Returns a list of projects that the user owns or has access to"""
         query = await session.execute(
             select(Project)
             .options(selectinload(Project.documents))
             .join(Access, Access.project_id == Project.id, isouter=True)
-            .where(
-                or_(
-                    Project.owner_id == user_id,
-                    Access.user_id == user_id
-                )
-            )
+            .where(or_(Project.owner_id == user_id, Access.user_id == user_id))
             .distinct()
         )
         return list(query.scalars().all())
@@ -118,7 +118,11 @@ class ProjectService:
 
     @classmethod
     async def update_project(
-        cls, session: AsyncSession, project_id: int, user_id: int, project_data: ProjectUpdate
+        cls,
+        session: AsyncSession,
+        project_id: int,
+        user_id: int,
+        project_data: ProjectUpdate,
     ) -> Project:
         """Modifies project details. Only the owner can update the project"""
         project = await cls._verify_access(session, project_id, user_id)
@@ -138,12 +142,16 @@ class ProjectService:
         return result.scalar_one()
 
     @classmethod
-    async def delete_project(cls, session: AsyncSession, project_id: int, user_id: int) -> None:
+    async def delete_project(
+        cls, session: AsyncSession, project_id: int, user_id: int
+    ) -> None:
         """
         Deletes a project. Commits database erasure first to guarantee integrity,
         then purges S3 assets cleanly
         """
-        project = await cls._verify_access(session, project_id, user_id, require_owner=True)
+        project = await cls._verify_access(
+            session, project_id, user_id, require_owner=True
+        )
 
         # Fetch ONLY the S3 URLs as raw strings
         url_query = await session.execute(
@@ -168,7 +176,12 @@ class ProjectService:
 
     @classmethod
     async def share_project(
-        cls, session: AsyncSession, project_id: int, owner_id: int, email: str, ttl_seconds: int = 86400
+        cls,
+        session: AsyncSession,
+        project_id: int,
+        owner_id: int,
+        email: str,
+        ttl_seconds: int = 86400,
     ) -> dict:
         """
         Generates a tokenized join link with a strict expiration window.
@@ -180,7 +193,8 @@ class ProjectService:
 
         # Embed timestamp inside the signature structure
         message = f"project:{project_id}:invite:{email}:expires:{expires_at}".encode(
-            "utf-8")
+            "utf-8"
+        )
         key = settings.SECRET_KEY.encode("utf-8")
         token = hmac.new(key, message, hashlib.sha256).hexdigest()
 
@@ -188,7 +202,7 @@ class ProjectService:
 
         return {
             "message": f"Share link generated successfully for {email}.",
-            "join_url": join_url
+            "join_url": join_url,
         }
 
     @classmethod
@@ -207,35 +221,33 @@ class ProjectService:
         await cls._verify_access(session, project_id, owner_id, require_owner=True)
 
         # Find user to invite
-        invited_user = (await session.execute(
-            select(User).where(User.login == invited_login)
-        )).scalar_one_or_none()
+        invited_user = (
+            await session.execute(select(User).where(User.login == invited_login))
+        ).scalar_one_or_none()
 
         if not invited_user:
-            raise HTTPException(status.HTTP_404_NOT_FOUND,
-                                f"User '{invited_login}' not found")
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, f"User '{invited_login}' not found"
+            )
 
         if invited_user.id == owner_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                                "Cannot invite yourself")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot invite yourself")
 
         # Check if already has access
-        existing = (await session.execute(
-            select(Access).where(
-                Access.project_id == project_id,
-                Access.user_id == invited_user.id
+        existing = (
+            await session.execute(
+                select(Access).where(
+                    Access.project_id == project_id, Access.user_id == invited_user.id
+                )
             )
-        )).scalar_one_or_none()
+        ).scalar_one_or_none()
 
         if existing:
-            raise HTTPException(status.HTTP_409_CONFLICT,
-                                "User already has access")
+            raise HTTPException(status.HTTP_409_CONFLICT, "User already has access")
 
         # Grant access
         access = Access(
-            project_id=project_id,
-            user_id=invited_user.id,
-            role="participant"
+            project_id=project_id, user_id=invited_user.id, role="participant"
         )
         session.add(access)
         await session.commit()
@@ -244,5 +256,5 @@ class ProjectService:
             "message": f"User '{invited_login}' invited successfully",
             "project_id": project_id,
             "invited_user_id": invited_user.id,
-            "role": "participant"
+            "role": "participant",
         }

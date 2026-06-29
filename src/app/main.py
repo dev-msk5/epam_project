@@ -1,15 +1,15 @@
 from contextlib import asynccontextmanager
 
 from argon2 import hash_password
-from fastapi import FastAPI, Depends
+from fastapi import Depends, FastAPI
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text, delete, select
 
-from app.routes import auth, projects, documents
-from app.db.session import init_db, get_session, engine
-from app.models.user import User
-from app.models.project import Project
+from app.db.session import engine, get_session, init_db
 from app.models.document import Document
+from app.models.project import Project
+from app.models.user import User
+from app.routes import auth, documents, projects
 
 
 @asynccontextmanager
@@ -22,9 +22,7 @@ async def lifespan(app: FastAPI):
 
     async with AsyncSession(engine) as session:
         # Check if test_user already exists
-        result = await session.execute(
-            select(User).where(User.login == "test_user")
-        )
+        result = await session.execute(select(User).where(User.login == "test_user"))
         existing_user = result.scalar_one_or_none()
 
         if existing_user:
@@ -34,7 +32,8 @@ async def lifespan(app: FastAPI):
                 login="test_user",
                 hashed_password=hash_password(
                     # expects bytes , then decode to str for database storage
-                    "test_password".encode()).decode()
+                    "test_password".encode()
+                ).decode(),
             )
             session.add(new_user)
             await session.flush()
@@ -42,8 +41,7 @@ async def lifespan(app: FastAPI):
         # Check if Test Project already exists for this user
         result = await session.execute(
             select(Project).where(
-                (Project.name == "Test Project") &
-                (Project.owner_id == new_user.id)
+                (Project.name == "Test Project") & (Project.owner_id == new_user.id)
             )
         )
         existing_project = result.scalar_one_or_none()
@@ -54,7 +52,7 @@ async def lifespan(app: FastAPI):
             new_project = Project(
                 name="Test Project",
                 owner_id=new_user.id,
-                description="This is a test project."
+                description="This is a test project.",
             )
             session.add(new_project)
             await session.flush()
@@ -62,8 +60,8 @@ async def lifespan(app: FastAPI):
         # Check if Test Document already exists for this project
         result = await session.execute(
             select(Document).where(
-                (Document.name == "Test Document") &
-                (Document.project_id == new_project.id)
+                (Document.name == "Test Document")
+                & (Document.project_id == new_project.id)
             )
         )
         existing_document = result.scalar_one_or_none()

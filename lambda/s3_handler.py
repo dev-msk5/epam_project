@@ -5,6 +5,7 @@ Parses project_id from key: projects/{project_id}/documents/...
 Sums all object sizes under that project prefix.
 Logs a warning if the total exceeds PROJECT_STORAGE_LIMIT_BYTES.
 """
+
 from __future__ import annotations
 
 import logging
@@ -18,16 +19,16 @@ log.setLevel(logging.INFO)
 
 S3 = boto3.client("s3")
 BUCKET = os.environ["S3_BUCKET_NAME"]
-LIMIT_BYTES = int(os.environ.get(
-    "PROJECT_STORAGE_LIMIT_BYTES", 524288000))  # 500 MB default
+LIMIT_BYTES = int(
+    os.environ.get("PROJECT_STORAGE_LIMIT_BYTES", 524288000)
+)  # 500 MB default
 
 KEY_RE = re.compile(r"^projects/(?P<project_id>\d+)/documents/")
 
 
 def _parse_project_id(key: str) -> int | None:
     """Attempt to parse project_id from S3 key. Returns None if not found"""
-    m = KEY_RE.match(
-        key)  # m is a match object if the regex matches, otherwise None
+    m = KEY_RE.match(key)  # m is a match object if the regex matches, otherwise None
     return int(m.group("project_id")) if m else None
 
 
@@ -59,7 +60,9 @@ def handler(event, context):
         if total > LIMIT_BYTES:
             log.warning(
                 "project_id=%s exceeded quota: %s > %s bytes",
-                project_id, total, LIMIT_BYTES,
+                project_id,
+                total,
+                LIMIT_BYTES,
             )
 
     return {"statusCode": 200}

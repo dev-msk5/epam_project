@@ -1,11 +1,11 @@
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
-import jwt
 
+from app.config import settings
 from app.db.session import get_session
 from app.models.user import User
-from app.config import settings
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
@@ -20,15 +20,12 @@ async def get_current_user(
     """
     try:
         payload = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM]
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
         )
         user_id: str = payload.get("sub")
         if not user_id:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token payload"
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload"
             )
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
@@ -38,8 +35,7 @@ async def get_current_user(
     user = await db.get(User, int(user_id))
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User no longer exists"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User no longer exists"
         )
     return user
 
@@ -52,5 +48,5 @@ def require_owner(project_owner_id: int, current_user: User) -> None:
     if project_owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the project owner can perform this action"
+            detail="Only the project owner can perform this action",
         )

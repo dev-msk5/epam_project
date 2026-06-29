@@ -10,11 +10,10 @@ avoids filename collisions.
 # - delete_file()     needed for document/project deletion
 # - download_file()  needed for document download
 
-import io
 import boto3
+from anyio.to_thread import run_sync
 from botocore.exceptions import ClientError
 from fastapi import HTTPException, status
-from anyio.to_thread import run_sync
 
 from app.config import settings
 
@@ -64,8 +63,8 @@ class S3Service:
     @classmethod
     async def upload_file(cls, file_obj, key: str, content_type: str) -> str:
         """
-            Asynchronously upload a file-like stream to S3
-            Streams from disk/buffer, preventing RAM bloat
+        Asynchronously upload a file-like stream to S3
+        Streams from disk/buffer, preventing RAM bloat
         """
         await run_sync(cls._sync_upload_fileobj, file_obj, key, content_type)
         return key

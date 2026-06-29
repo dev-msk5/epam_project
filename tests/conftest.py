@@ -3,24 +3,19 @@ import gc
 import os
 import socket
 from typing import AsyncGenerator, Generator
-import pytest
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.pool import NullPool
 from unittest.mock import AsyncMock, patch
 
-from app.main import app
+import pytest
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
+
+from app.config import settings
 from app.db.base import Base
 from app.db.session import get_session
-from app.config import settings
-from app.security import create_access_token, get_password_hash
-
-
+from app.main import app
 from app.models.user import User
-from app.models.project import Project
-from app.models.document import Document
-from app.models.access import Access
-
+from app.security import create_access_token, get_password_hash
 
 # Parse and resolve Database URL
 DATABASE_URL = settings.DATABASE_URL
@@ -37,7 +32,8 @@ if "postgresql+asyncpg://" in DATABASE_URL:
             socket.getaddrinfo("db", 5432)
         except socket.gaierror:
             TEST_DATABASE_URL = TEST_DATABASE_URL.replace(
-                "@db:", "@localhost:").replace("@db/", "@localhost/")
+                "@db:", "@localhost:"
+            ).replace("@db/", "@localhost/")
 else:
     TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", DATABASE_URL)
 
@@ -56,7 +52,7 @@ async def test_engine():
     engine = create_async_engine(
         TEST_DATABASE_URL,
         echo=False,
-        poolclass=NullPool  # Prevents connections from being pooled across closed loops
+        poolclass=NullPool,  # Prevents connections from being pooled across closed loops
     )
     yield engine
     # Explicitly clean up all engine resources on teardown
@@ -77,7 +73,7 @@ async def setup_db(test_engine):
 @pytest.fixture
 async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
     """
-    Provide a transaction-isolated database session for each test. 
+    Provide a transaction-isolated database session for each test.
     Rolls back any changes after the test completes
     """
     async with test_engine.connect() as connection:
@@ -99,6 +95,7 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
 @pytest.fixture(autouse=True)
 def override_dependencies(db_session: AsyncSession):
     """Override the FastAPI get_session dependency with our rollback-enabled session"""
+
     async def _get_test_session():
         yield db_session
 
@@ -123,16 +120,11 @@ def mock_s3() -> Generator[dict[str, AsyncMock], None, None]:
         patch("app.s3.S3Service.delete_file", new_callable=AsyncMock) as mock_delete,
         patch("app.s3.S3Service.generate_download_url") as mock_url,
     ):
-
         mock_upload.return_value = "projects/1/documents/mock_doc.pdf"
         mock_delete.return_value = None
         mock_url.return_value = "https://mocked-s3-presigned-url.com/download"
 
-        yield {
-            "upload": mock_upload,
-            "delete": mock_delete,
-            "url": mock_url
-        }
+        yield {"upload": mock_upload, "delete": mock_delete, "url": mock_url}
 
 
 @pytest.fixture
@@ -146,12 +138,12 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
 #  Shared User Fixtures
 
+
 @pytest.fixture
 async def test_owner(db_session: AsyncSession) -> User:
     """Create a default project owner user."""
     owner = User(
-        login="owner_user_test",
-        hashed_password=get_password_hash("StrongPassword123!")
+        login="owner_user_test", hashed_password=get_password_hash("StrongPassword123!")
     )
     db_session.add(owner)
     await db_session.flush()
@@ -163,7 +155,7 @@ async def test_participant(db_session: AsyncSession) -> User:
     """Create a default participant user"""
     participant = User(
         login="participant_user_test",
-        hashed_password=get_password_hash("StrongPassword123!")
+        hashed_password=get_password_hash("StrongPassword123!"),
     )
     db_session.add(participant)
     await db_session.flush()
@@ -175,7 +167,7 @@ async def test_other_user(db_session: AsyncSession) -> User:
     """Create an unrelated user with no shared project access"""
     other = User(
         login="unrelated_user_test",
-        hashed_password=get_password_hash("StrongPassword123!")
+        hashed_password=get_password_hash("StrongPassword123!"),
     )
     db_session.add(other)
     await db_session.flush()
@@ -189,6 +181,7 @@ async def other_user(test_other_user: User) -> User:
 
 
 #  Authentication Header Fixtures
+
 
 @pytest.fixture
 def owner_headers(test_owner: User) -> dict[str, str]:

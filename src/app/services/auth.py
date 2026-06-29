@@ -5,14 +5,13 @@ Responsibilities:
 - Authenticate existing users (verify credentials, return user for JWT issuance)
 """
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
-
 from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.security import get_password_hash, verify_password
 from app.models.user import User
+from app.security import get_password_hash, verify_password
 
 
 async def register_user(db: AsyncSession, login: str, password: str) -> User:
@@ -40,6 +39,6 @@ async def authenticate_user(db: AsyncSession, login: str, password: str) -> User
     if not user or not verify_password(password, user.hashed_password):
         raise HTTPException(
             status_code=401,  # Unauthorized
-            detail="Invalid login or password"
+            detail="Invalid login or password",
         )
     return user
