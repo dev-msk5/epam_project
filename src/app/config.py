@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 # Pydantic settings, reads from .env
-# Keep this aligned with the .env file and Pydantic loading behavior.
+# Keep this aligned with the .env file
 
 
 class Settings(BaseSettings):

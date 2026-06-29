@@ -1,0 +1,33 @@
+# everything from production
+-r requirements.txt
+
+# Linting & formatting
+ruff==0.15.20
+
+# Type checking
+mypy==1.14.0
+mypy-boto3-s3==1.43.31
+boto3-stubs==1.43.36
+botocore-stubs==1.43.14
+types-awscrt==0.34.1
+types-s3transfer==0.16.0
+mypy_extensions==1.1.0
+
+# Testing framework
+pytest==8.3.5
+# pinned to 0.25.0 stable
+# asyncio_mode = "auto" in pyproject.toml; upgrade only after migrating tests
+pytest-asyncio==0.25.0
+pytest-cov==7.1.0
+coverage==7.14.3
+
+# HTTP test client for FastAPI async tests
+httpx==0.28.1
+
+# S3 mocking
+moto[s3]==5.1.18
+
+# Misc dev utilities
+iniconfig==2.3.0
+packaging==26.2
+pluggy==1.6.0

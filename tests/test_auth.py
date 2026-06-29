@@ -25,7 +25,7 @@ class test_login():
 #  missing login returns 422
 
 
-class test_token_expiry():
+class test_token_expiry():  # if expired token is used, returns 401 CHECK, refresh
     pass
 #  valid token is accepted on protected route
 #  expired token returns 401

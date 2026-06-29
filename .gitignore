@@ -1,9 +1,20 @@
 *.pyc
 .env
+.env.*
 venv/
-.env.local
+.venv/
+env/
 notes_for_me.txt
 .coverage
 __pycache__/
 .pytest_cache/
 coverage.xml
+.ruff_cache
+#python artifacts
+*.egg-info/
+dist/
+build/
+.eggs/
+.vscode/
+*.log
+logs/
