@@ -1,7 +1,6 @@
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +36,8 @@ async def lifespan(app: FastAPI):
         # Seed: Test Project
         result = await session.execute(
             select(Project).where(
-                (Project.name == "Test Project") & (Project.owner_id == new_user.id)
+                (Project.name == "Test Project") & (
+                    Project.owner_id == new_user.id)
             )
         )
         existing_project = result.scalar_one_or_none()
