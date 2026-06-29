@@ -15,9 +15,7 @@ mypy_extensions==1.1.0
 
 # Testing framework
 pytest==8.3.5
-# pinned to 0.25.0 stable
-# asyncio_mode = "auto" in pyproject.toml; upgrade only after migrating tests
-pytest-asyncio==0.25.0
+pytest-asyncio==0.25.3
 pytest-cov==7.1.0
 coverage==7.14.3
 
