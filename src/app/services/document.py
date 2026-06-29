@@ -39,8 +39,7 @@ class DocumentService:
         """
         name = (name or "").strip().replace("\\", "/").split("/")[-1]
         if not name or name.startswith("."):
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, "Invalid filename")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid filename")
         base, dot, ext = name.rpartition(".")
         ext = f".{ext.lower()}" if dot else ""
         base = re.sub(r"[^a-zA-Z0-9._-]", "_", base).strip("._-")
@@ -66,8 +65,7 @@ class DocumentService:
         """
         project = (
             await session.execute(
-                select(Project).where(Project.id ==
-                                      project_id).with_for_update()
+                select(Project).where(Project.id == project_id).with_for_update()
                 # Fetch the project with this ID,
                 # lock it so no other transaction can modify it while occupied
                 # One Project row is expected, if more than one, it will raise an error
@@ -173,8 +171,7 @@ class DocumentService:
         """Upload multiple documents to a project
         with quota validation and S3 storage"""
         if not files:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                                "No files provided")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "No files provided")
 
         project = await cls._lock_project(session, project_id)  # noqa: F841
         await cls._get_role(session, project_id, user_id)
@@ -298,13 +295,11 @@ class DocumentService:
         """
         doc = (
             await session.execute(
-                select(Document).where(Document.id ==
-                                       document_id).with_for_update()
+                select(Document).where(Document.id == document_id).with_for_update()
             )
         ).scalar_one_or_none()
         if not doc:
-            raise HTTPException(status.HTTP_404_NOT_FOUND,
-                                "Document not found")
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
         # any project member (owner or participant) may update
         # no longer tied to who originally uploaded the file
         await cls._get_role(session, doc.project_id, user_id)
@@ -363,13 +358,11 @@ class DocumentService:
         """
         doc = (
             await session.execute(
-                select(Document).where(Document.id ==
-                                       document_id).with_for_update()
+                select(Document).where(Document.id == document_id).with_for_update()
             )
         ).scalar_one_or_none()
         if not doc:
-            raise HTTPException(status.HTTP_404_NOT_FOUND,
-                                "Document not found")
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
         # only the project OWNER may delete, role-based, not document-uploader-based
         # This is the rule the spec requires:
         # "participant: can modify, cannot delete"
@@ -407,8 +400,7 @@ class DocumentService:
             await session.execute(select(Document).where(Document.id == document_id))
         ).scalar_one_or_none()
         if not doc:
-            raise HTTPException(status.HTTP_404_NOT_FOUND,
-                                "Document not found")
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
         await cls._get_role(session, doc.project_id, user_id)
         if doc.is_pending:
             raise HTTPException(
