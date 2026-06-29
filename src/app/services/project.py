@@ -107,7 +107,7 @@ class ProjectService:
     async def get_project_details(
         cls, session: AsyncSession, project_id: int, user_id: int
     ) -> Project:
-        """Returns project details if the user has access, 
+        """Returns project details if the user has access,
         otherwise raises an HTTPException"""
         await cls._verify_access(session, project_id, user_id)
         result = await session.execute(
@@ -233,8 +233,7 @@ class ProjectService:
             )
 
         if invited_user.id == owner_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                                "Cannot invite yourself")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot invite yourself")
 
         # Check if already has access
         existing = (
@@ -246,8 +245,7 @@ class ProjectService:
         ).scalar_one_or_none()
 
         if existing:
-            raise HTTPException(status.HTTP_409_CONFLICT,
-                                "User already has access")
+            raise HTTPException(status.HTTP_409_CONFLICT, "User already has access")
 
         # Grant access
         access = Access(

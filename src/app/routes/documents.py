@@ -88,7 +88,7 @@ async def get_document(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Get the download URL for a specific document. 
+    """Get the download URL for a specific document.
     User must have access to the document"""
     return await DocumentService.get_document_download_url(
         session, document_id, current_user.id

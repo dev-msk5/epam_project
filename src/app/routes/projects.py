@@ -6,7 +6,7 @@
  - DELETE /project/<project_id>        (Delete project)
  - POST /project/<project_id>/invite?user=<login>  (Grant access to user)
 
- - GET /project/<project_id>/share?with=<email>   
+ - GET /project/<project_id>/share?with=<email>
  (Send share link via email - Optional Phase 1)
 """
 
@@ -126,7 +126,7 @@ async def share_project(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Generate a share link for a project and send it via email. 
+    """Generate a share link for a project and send it via email.
     Only the project owner can share"""
     # Optional Phase 1 tokenized share path
     return await ProjectService.share_project(

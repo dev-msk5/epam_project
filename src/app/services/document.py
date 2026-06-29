@@ -28,7 +28,7 @@ class DocumentService:
         and ensure consistent storage structure in S3
 
         Security considerations:
-        - Strips backslashes and takes only the final path component 
+        - Strips backslashes and takes only the final path component
         (prevents ../.. traversal)
         - Rejects empty/hidden files (starting with dot)
         - Allows only alphanumeric, dot, underscore, and hyphen in basename
@@ -80,7 +80,7 @@ class DocumentService:
 
     @staticmethod
     async def _get_role(session: AsyncSession, project_id: int, user_id: int) -> str:
-        """Returns the role of the user in the project (owner or participant) 
+        """Returns the role of the user in the project (owner or participant)
         or raises HTTPException if no access"""
         # check if owner first
         project = (
@@ -170,7 +170,7 @@ class DocumentService:
         user_id: int,
         files: list[UploadFile],
     ) -> list[DocumentOut]:
-        """Upload multiple documents to a project 
+        """Upload multiple documents to a project
         with quota validation and S3 storage"""
         if not files:
             raise HTTPException(status.HTTP_400_BAD_REQUEST,
