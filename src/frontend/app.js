@@ -13,7 +13,7 @@ function escapeHtml(str) {
   }[c]));
 }
 
-// Converts a raw byte count into a clean, human-readable string (eg. 2,5 MB)
+// Converts a raw byte count into a clean, human-readable string (eg. 2.5 MB)
 function formatBytes(bytes) {
   if (bytes == null || Number.isNaN(bytes)) return '';
   if (bytes === 0) return '0 B';
@@ -23,7 +23,7 @@ function formatBytes(bytes) {
   return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
-// Extracts and parses the JSON payload from a standard JWT token
+// Extracts and parses the JSON payload from a standard JWT token (base64url decode)
 function decodeJwt(token) {
   try {
     const payload = token.split('.')[1];
@@ -40,21 +40,22 @@ function decodeJwt(token) {
   }
 }
 
-// Checks common claim keys (sub, uid, etc.) to pull the user's ID out of the JWT
+// Extracts user_id from JWT payload (matches backend's create_access_token):
+// { "sub": "<user_id>", "exp": <unix_timestamp> }
 function getUserIdFromToken(token) {
   const payload = decodeJwt(token);
   if (!payload) return null;
-  return payload.user_id ?? payload.uid ?? payload.id ?? payload.sub ?? null;
+  return payload.sub ? parseInt(payload.sub, 10) : null;
 }
 
-// Standardizes the document array from various backend JSON shapes so the UI doesnt break
+// Standardizes document array shape - backend may return raw array or {documents: [...]} wrapper
 function extractDocuments(res) {
   return Array.isArray(res) ? res : (res && res.documents) || [];
 }
 
 /* 
- * In-memory state (token is also persisted to localStorage)
- * Calculated immediately to prevent redundant deferred initialization */
+ * In-memory state (token is also persisted to localStorage for session persistence)
+ * Initialized once at page load to restore session if browser was closed/reopened */
 const initialToken = localStorage.getItem(TOKEN_KEY) || null;
 const state = {
   token: initialToken,
@@ -64,7 +65,7 @@ const state = {
 
 /* Auth state helpers */
 
-// Stores a new JWT in localStorage and memory, then decodes the user's ID
+// Stores a new JWT in localStorage and memory, then decodes and caches the user's ID
 function setToken(token) {
   state.token = token;
   localStorage.setItem(TOKEN_KEY, token);
@@ -85,7 +86,7 @@ function isLoggedIn() {
 
 /* API layer */
 
-// Custom error class to carry HTTP status codes alongside API rejection details.
+// Custom error class to carry HTTP status codes alongside API rejection details
 class ApiError extends Error {
   constructor(status, message, detail) {
     super(message);
@@ -94,7 +95,8 @@ class ApiError extends Error {
   }
 }
 
-// Central fetch wrapper that sets up content-types, attaches JWT headers, and kicks users to login on 401s
+// Central fetch wrapper: handles content-type negotiation, JWT header attachment, network errors, and 401 redirects
+// Catches both network failures (fetch error) and HTTP error responses; parses Pydantic validation errors (422) into readable messages
 async function apiFetch(path, { method = 'GET', body, isForm = false } = {}) {
   const headers = {};
   let reqBody = undefined;
@@ -108,6 +110,7 @@ async function apiFetch(path, { method = 'GET', body, isForm = false } = {}) {
     }
   }
 
+  // Attach JWT Bearer token to all non-auth endpoints (backend to verify user identity and check permissions)
   const isAuthRoute = path.startsWith('/auth') || path.startsWith('/login');
   if (state.token && !isAuthRoute) {
     headers['Authorization'] = `Bearer ${state.token}`;
@@ -121,9 +124,11 @@ async function apiFetch(path, { method = 'GET', body, isForm = false } = {}) {
       body: reqBody,
     });
   } catch (networkErr) {
-    throw new ApiError(0, 'Network error — check your connection and try again.');
+    // Network failure (no connection, CORS blocked, etc.)
+    throw new ApiError(0, 'Network error - check your connection and try again.');
   }
 
+  // 401 means JWT is expired or invalid - clear session and force re-login
   if (res.status === 401) {
     clearToken();
     navigate('/login');
@@ -135,11 +140,13 @@ async function apiFetch(path, { method = 'GET', body, isForm = false } = {}) {
     let detail;
     let message;
 
+    // Try to extract error detail from JSON response
     if (contentType.includes('application/json')) {
       const data = await res.json().catch(() => null);
       detail = data && data.detail;
     }
 
+    // Parse Pydantic validation errors (422 status) into field-level messages
     if (res.status === 422 && Array.isArray(detail)) {
       message = detail.map((d) => `${(d.loc || []).slice(1).join('.')}: ${d.msg}`).join('; ');
     } else if (res.status === 403) {
@@ -160,7 +167,7 @@ async function apiFetch(path, { method = 'GET', body, isForm = false } = {}) {
   return res;
 }
 
-// Wrapper for apiFetch that automatically parses and returns JSON if the response has content
+// Wrapper for apiFetch that automatically parses and returns JSON if the response has content; returns null for 204 No Content
 async function apiJson(path, opts) {
   const res = await apiFetch(path, opts);
   if (res.status === 204) return null;
@@ -169,11 +176,12 @@ async function apiJson(path, opts) {
   return null;
 }
 
-// Handles downloading a document, either by launching an S3 presigned URL or creating a local blob link
+// Downloads a document: if backend returns presigned S3 URL (as JSON), open it directly; otherwise proxy file bytes through browser blob download
 async function downloadDocument(docId, suggestedName) {
   const res = await apiFetch(`/document/${docId}`);
   const contentType = res.headers.get('content-type') || '';
 
+  // Backend response is a presigned S3 URL - let browser download directly from S3
   if (contentType.includes('application/json')) {
     const data = await res.json();
     const url = data.url || data.download_url || data.presigned_url;
@@ -184,6 +192,7 @@ async function downloadDocument(docId, suggestedName) {
     throw new ApiError(500, 'Download URL missing from server response.');
   }
 
+  // Backend response is raw file bytes - create blob and trigger browser download
   const blob = await res.blob();
   const blobUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -197,29 +206,31 @@ async function downloadDocument(docId, suggestedName) {
 
 /* Router */
 
-// Programmatically changes the URL hash to trigger a page transition
+// Programmatically changes the URL hash to trigger a page transition (SPA navigation model)
 function navigate(path) {
   if (location.hash.slice(1) !== path) {
-    location.hash = path;
+    location.hash = path; // Triggers 'hashchange' event, which calls render()
   } else {
-    render();
+    render(); // Force re-render if hash hasn't changed
   }
 }
 
-// Returns the current route based on URL hash, defaulting to '/login' if empty
+// Returns the current route based on URL hash; defaults to '/login' if hash is empty
 function currentRoute() {
   return location.hash.slice(1) || '/login';
 }
 
-// Simple hash router that validates auth state and chooses which layout function to execute
+// Master router: enforces auth state guards (can't access protected routes without token), shows/hides topbar, and dispatches to view functions
 function render() {
   const route = currentRoute();
   const topbar = document.getElementById('topbar');
 
+  // unauthenticated user trying to access protected route - redirect to login
   if (!isLoggedIn() && route !== '/login') {
     location.hash = '/login';
     return;
   }
+  // authenticated user trying to access login - redirect to dashboard (already logged in)
   if (isLoggedIn() && route === '/login') {
     location.hash = '/dashboard';
     return;
@@ -231,6 +242,7 @@ function render() {
       state.userId != null ? `user #${state.userId}` : '';
   }
 
+  // Route dispatch
   if (route === '/login') return renderLogin();
   if (route === '/dashboard') return renderDashboard();
 
@@ -240,8 +252,8 @@ function render() {
   return renderNotFound();
 }
 
-window.addEventListener('hashchange', render);
-window.addEventListener('DOMContentLoaded', render);
+window.addEventListener('hashchange', render); // Trigger render on hash change (navigation)
+window.addEventListener('DOMContentLoaded', render); // Trigger render on initial page load
 
 document.getElementById('logoutBtn').addEventListener('click', () => {
   clearToken();
@@ -250,7 +262,9 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 
 /* View: Login / Register */
 
-// Renders the auth card and manages form submissions for logging in and registering
+// Renders the auth card with login/register tabs; handles form submissions for both flows
+// Login: POST /login - get JWT - setToken - redirect to dashboard
+// Register: POST /auth - show success message - user can then log in
 function renderLogin() {
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -299,6 +313,7 @@ function renderLogin() {
   function showError(msg) { errorEl.textContent = msg; errorEl.hidden = false; noticeEl.hidden = true; }
   function hideMessages() { errorEl.hidden = true; noticeEl.hidden = true; }
 
+  // Tab switching UI
   tabs.forEach((btn) => btn.addEventListener('click', () => {
     tabs.forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
@@ -308,6 +323,7 @@ function renderLogin() {
     registerForm.hidden = tab !== 'register';
   }));
 
+  // Login form: send credentials, extract JWT from response, cache it
   loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     hideMessages();
@@ -317,13 +333,14 @@ function renderLogin() {
       const data = await apiJson('/login', { method: 'POST', body: payload });
       const token = data && (data.access_token || data.token || data.jwt);
       if (!token) throw new ApiError(500, 'Login succeeded but no token was returned.');
-      setToken(token);
+      setToken(token); // Cache JWT in state & localStorage
       navigate('/dashboard');
     } catch (err) {
       showError(err.message);
     }
   });
 
+  // Register form: send new user credentials, show success, let user switch to login tab
   registerForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     hideMessages();
@@ -337,8 +354,8 @@ function renderLogin() {
       await apiJson('/auth', { method: 'POST', body: payload });
       noticeEl.textContent = 'Account created. You can log in now.';
       noticeEl.hidden = false;
-      tabs[0].click();
-      loginForm.elements.login.value = payload.login;
+      tabs[0].click(); // Switch to login tab
+      loginForm.elements.login.value = payload.login; // Pre-fill login field
     } catch (err) {
       showError(err.message);
     }
@@ -347,7 +364,8 @@ function renderLogin() {
 
 /* View: Dashboard (project list) */
 
-// Renders the workspace dashboard containing the user's project grid and project creation modal
+// Renders the workspace dashboard: fetches user's projects (all accessible to them as owner or participant),
+// displays grid of cards (owner/participant badge, doc count), and provides modal to create new project
 async function renderDashboard() {
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -380,6 +398,7 @@ async function renderDashboard() {
   newBtn.addEventListener('click', () => { newForm.hidden = false; newBtn.hidden = true; });
   cancelBtn.addEventListener('click', () => { newForm.hidden = true; newBtn.hidden = false; newForm.reset(); });
 
+  // Create new project form: POST /projects with name and description, then refresh list
   newForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(newForm);
@@ -389,12 +408,13 @@ async function renderDashboard() {
       newForm.reset();
       newForm.hidden = true;
       newBtn.hidden = false;
-      await loadProjects();
+      await loadProjects(); // Refresh project list to show new project
     } catch (err) {
       showError(err.message);
     }
   });
 
+  // Render projects grid: display card for each, show owner vs. participant badge, attach click handler to navigate to detail
   function renderGrid() {
     if (state.projects.length === 0) {
       grid.innerHTML = '<p class="muted">No projects yet. Create your first one above.</p>';
@@ -420,6 +440,7 @@ async function renderDashboard() {
     });
   }
 
+  // Fetch all projects accessible to current user (backend returns only those the user owns or is invited to)
   async function loadProjects() {
     try {
       const projects = await apiJson('/projects');
@@ -436,7 +457,8 @@ async function renderDashboard() {
 
 /* View: Project detail */
 
-// Loads project details, manages S3 uploads, file downloads, and restricts workspace features (invite/delete) to project owners
+// Renders a single project's detail page: project info (editable if owner), documents list/upload, and invite form (owner-only)
+// role-based UI: owner sees delete/invite buttons, participant sees read-only info but can download/modify docs
 async function renderProjectDetail(id) {
   const app = document.getElementById('app');
   app.innerHTML = '<p class="muted">Loading project…</p>';
@@ -456,6 +478,7 @@ async function renderProjectDetail(id) {
     return;
   }
 
+  // rolechecl, is current user the project owner
   const isOwner = state.userId != null && String(project.owner_id) === String(state.userId);
 
   app.innerHTML = `
@@ -503,6 +526,7 @@ async function renderProjectDetail(id) {
 
   document.getElementById('backBtn').addEventListener('click', () => navigate('/dashboard'));
 
+  // Edit project info: PUT /project/{id}/info with name and description
   document.getElementById('infoForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -516,6 +540,7 @@ async function renderProjectDetail(id) {
     }
   });
 
+  // Owner only: delete project (and all its documents from DB + S3)
   if (isOwner) {
     document.getElementById('deleteProjectBtn').addEventListener('click', async () => {
       if (!confirm(`Delete "${project.name}"? This also deletes its documents. This cannot be undone.`)) return;
@@ -527,6 +552,7 @@ async function renderProjectDetail(id) {
       }
     });
 
+    // Owner only: invite a user to access this project (grant participant role)
     document.getElementById('inviteForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -541,12 +567,16 @@ async function renderProjectDetail(id) {
     });
   }
 
+  // extract document display name (fallback chain for different backend response shapes)
   function docName(doc) { return doc.filename || doc.name || doc.file_name || `Document ${doc.id}`; }
+  
+  // format document file size for display
   function docSize(doc) {
     const bytes = doc.size_bytes ?? doc.size ?? null;
     return bytes != null ? formatBytes(bytes) : '';
   }
 
+  // Render documents list: show name, size, and action buttons (download for all, delete for owner only)
   function renderDocs() {
     const list = document.getElementById('docList');
     if (documents.length === 0) {
@@ -564,10 +594,12 @@ async function renderProjectDetail(id) {
       </li>
     `).join('');
 
+    // Attach handlers to each document row
     list.querySelectorAll('.doc-row').forEach((row) => {
       const docId = row.dataset.id;
-      const doc = documents.find((d) => String(d.id) !== docId);
+      const doc = documents.find((d) => String(d.id) === docId);
 
+      // Download document: GET /document/{id} - presigned URL or blob
       row.querySelector('.doc-download').addEventListener('click', async () => {
         try {
           await downloadDocument(docId, docName(doc));
@@ -576,6 +608,7 @@ async function renderProjectDetail(id) {
         }
       });
 
+      // Owner only: delete document from project (also removes from S3)
       const delBtn = row.querySelector('.doc-delete');
       if (delBtn) {
         delBtn.addEventListener('click', async () => {
@@ -593,12 +626,14 @@ async function renderProjectDetail(id) {
   }
   renderDocs();
 
+  // Upload documents: POST /project/{id}/documents with multipart FormData, then refresh document list
   document.getElementById('uploadForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const input = e.target.elements.files;
     const files = Array.from(input.files || []);
     if (files.length === 0) return;
 
+    // Validate file types on client (PDF and DOCX only, matches backend acceptance)
     const allowed = /\.(pdf|docx)$/i;
     const bad = files.find((f) => !allowed.test(f.name));
     if (bad) {
@@ -623,7 +658,7 @@ async function renderProjectDetail(id) {
 
 /* View: 404 */
 
-// fallback view that renders an error card if the user hits an invalid hash route
+// Fallback for invalid routes: show error card and link back to dashboard
 function renderNotFound() {
   document.getElementById('app').innerHTML = `
     <div class="card">
