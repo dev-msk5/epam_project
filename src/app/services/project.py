@@ -48,7 +48,7 @@ class ProjectService:
 
         if require_owner:
             logger.warning(
-                f"Permission denied: User {user_id} is not the owner of Project {project_id}"
+                f"Permission denied: User {user_id} is not the owner of Project {project_id}"  # noqa: E501
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -193,7 +193,7 @@ class ProjectService:
                 logger.info(f"S3 file deleted successfully: {key}")
             except Exception as e:
                 logger.warning(
-                    f"Failed to delete S3 file: {key} during project deletion | Error: {str(e)}"
+                    f"Failed to delete S3 file: {key} during project deletion | Error: {str(e)}"  # noqa: E501
                 )
 
     @classmethod
@@ -211,7 +211,7 @@ class ProjectService:
         await cls._verify_access(session, project_id, owner_id, require_owner=True)
 
         logger.info(
-            f"User {owner_id} is generating a share token for {email} on Project {project_id}"
+            f"User {owner_id} is generating a share token for {email} on Project {project_id}"  # noqa: E501
         )
 
         # Set explicit expiration timestamp (eg. 24 hours from now)
@@ -295,7 +295,7 @@ class ProjectService:
         await session.commit()
 
         logger.info(
-            f"User '{invited_login}' successfully joined Project {project_id} as participant"
+            f"User '{invited_login}' successfully joined Project {project_id} as participant"  # noqa: E501
         )
         return {
             "message": f"User '{invited_login}' invited successfully",

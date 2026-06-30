@@ -1,9 +1,10 @@
+import contextvars
+import logging
+import logging.config
 import os
 import time
 import uuid
-import logging
-import logging.config
-import contextvars
+
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -36,7 +37,7 @@ logging_config = {
     "formatters": {
         "detailed": {
             # Injects the [req_id] placeholder into every log entry
-            "format": "%(asctime)s [%(levelname)s] [id: %(request_id)s] %(name)s: %(message)s",
+            "format": "%(asctime)s [%(levelname)s] [id: %(request_id)s] %(name)s: %(message)s",  # noqa: E501
             "datefmt": "%Y-%m-%dT%H:%M:%S%z",
         },
     },
@@ -83,7 +84,8 @@ logger = logging.getLogger("app_logger")
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
-    """Middleware that tracks request processing times and manages request-id lifecycles"""
+    """Middleware that tracks request processing times and
+    manages request-id lifecycles"""
 
     async def dispatch(self, request: Request, call_next):
         # Read incoming request ID or generate a new short tracker
@@ -100,7 +102,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             response: Response = await call_next(request)
             duration = round(time.time() - start_time, 4)
             logger.info(
-                f"Completed: {request.method} {request.url.path} | Status: {response.status_code} in {duration}s"
+                f"Completed: {request.method} {request.url.path} | Status: {response.status_code} in {duration}s"  # noqa: E501
             )
 
             # The application has responded, now modify the response
@@ -113,7 +115,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             duration = round(time.time() - start_time, 4)
             logger.error(
-                f"Failed: {request.method} {request.url.path} | Crash after {duration}s | Error: {str(e)}",
+                f"Failed: {request.method} {request.url.path} | Crash after {duration}s | Error: {str(e)}",  # noqa: E501
                 exc_info=True,
             )
             raise e

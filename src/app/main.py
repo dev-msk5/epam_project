@@ -6,11 +6,11 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# logger configuration
-from app.logging_config import LoggingMiddleware, logger
-
 # database configuration
 from app.db.session import engine, get_session, init_db
+
+# logger configuration
+from app.logging_config import LoggingMiddleware, logger
 from app.models.document import Document
 from app.models.project import Project
 from app.models.user import User

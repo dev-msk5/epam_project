@@ -104,7 +104,7 @@ class DocumentService:
 
         if not role:
             logger.warning(
-                f"Access check denied: User {user_id} requested access to Project {project_id}"
+                f"Access check denied: User {user_id} requested access to Project {project_id}"  # noqa: E501
             )
             raise HTTPException(status.HTTP_403_FORBIDDEN, "No access")
 
@@ -193,7 +193,7 @@ class DocumentService:
         used = await cls._project_usage(session, project_id)
         if used + total > settings.PROJECT_STORAGE_LIMIT_BYTES:
             logger.warning(
-                f"Upload rejected: Project {project_id} storage limit exceeded during multi-upload"
+                f"Upload rejected: Project {project_id} storage limit exceeded during multi-upload"  # noqa: E501
             )
             raise HTTPException(
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Quota exceeded"
@@ -235,7 +235,7 @@ class DocumentService:
             for doc in docs:
                 await session.refresh(doc)
             logger.info(
-                f"User {user_id} successfully uploaded {len(docs)} documents to Project {project_id}"
+                f"User {user_id} successfully uploaded {len(docs)} documents to Project {project_id}"  # noqa: E501
             )
             return [DocumentOut.model_validate(d) for d in docs]
 
@@ -327,7 +327,7 @@ class DocumentService:
         used = await cls._project_usage(session, doc.project_id)
         if used - int(doc.size or 0) + size > settings.PROJECT_STORAGE_LIMIT_BYTES:
             logger.warning(
-                f"Update rejected: Project {doc.project_id} limit exceeded during document {document_id} replace"
+                f"Update rejected: Project {doc.project_id} limit exceeded during document {document_id} replace"  # noqa: E501
             )
             raise HTTPException(
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Quota exceeded"
@@ -339,7 +339,7 @@ class DocumentService:
         )
         try:
             logger.info(
-                f"User {user_id} is replacing content of Document {document_id} in Project {doc.project_id}"
+                f"User {user_id} is replacing content of Document {document_id} in Project {doc.project_id}"  # noqa: E501
             )
             # seek to the beginning before uploading so S3 receives
             # the full file content and not 0 bytes
@@ -357,7 +357,7 @@ class DocumentService:
             )
         except Exception as e:
             logger.error(
-                f"Replace execution failed for Document {document_id} | Error: {str(e)}",
+                f"Replace execution failed for Document {document_id} | Error: {str(e)}",  # noqa: E501
                 exc_info=True,
             )
             await cls._cleanup_s3([new_key])
@@ -399,14 +399,14 @@ class DocumentService:
         role = await cls._get_role(session, doc.project_id, user_id)
         if role != "owner":
             logger.warning(
-                f"Permission denied: User {user_id} tried to delete Document {document_id} (Participant status)"
+                f"Permission denied: User {user_id} tried to delete Document {document_id} (Participant status)"  # noqa: E501
             )
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN, "Only project owner can delete"
             )
 
         logger.info(
-            f"User {user_id} is deleting Document {document_id} from Project {doc.project_id}"
+            f"User {user_id} is deleting Document {document_id} from Project {doc.project_id}"  # noqa: E501
         )
         key = doc.url
         await session.delete(doc)
@@ -444,13 +444,13 @@ class DocumentService:
         await cls._get_role(session, doc.project_id, user_id)
         if doc.is_pending:
             logger.warning(
-                f"Download request rejected: Document {document_id} is currently processing"
+                f"Download request rejected: Document {document_id} is currently processing"  # noqa: E501
             )
             raise HTTPException(
                 status.HTTP_409_CONFLICT, "Document is still being processed"
             )
         logger.info(
-            f"User {user_id} successfully generated download token for Document {document_id}"
+            f"User {user_id} successfully generated download token for Document {document_id}"  # noqa: E501
         )
         return DocumentDownloadOut(
             **DocumentOut.model_validate(doc).model_dump(),
