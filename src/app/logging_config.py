@@ -8,8 +8,10 @@ import uuid
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# logs directory exists before logging initializes
-os.makedirs("logs", exist_ok=True)
+# Logging defaults to a "logs" directory in the current working directory
+LOG_DIR = os.getenv("LOG_DIR", "logs")
+
+os.makedirs(LOG_DIR, exist_ok=True)
 
 # Context variable to store trace IDs across async task boundaries
 request_id_context = contextvars.ContextVar("request_id", default="-")
@@ -52,7 +54,7 @@ logging_config = {
             "class": "logging.handlers.RotatingFileHandler",
             "level": "INFO",
             "formatter": "detailed",
-            "filename": "logs/app.log",
+            "filename": os.path.join(LOG_DIR, "app.log"),
             "maxBytes": 10 * 1024 * 1024,  # 10 MB
             "backupCount": 3,
             "encoding": "utf-8",

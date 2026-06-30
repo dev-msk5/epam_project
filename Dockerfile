@@ -20,6 +20,8 @@ COPY . .
 RUN adduser --disabled-password --no-create-home appuser
 USER appuser
 
+RUN mkdir -p /app/logs
+
 # Make sure app package is importable, NO SRC in imports
 ENV PYTHONPATH=/app/src
 

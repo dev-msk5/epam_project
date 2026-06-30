@@ -8,6 +8,7 @@ services:
       - "8000:8000"
     volumes:
       - .:/app        # mirrors local folder into the container
+      - ./logs:/app/logs  # host:container, maps local ./logs to /app/logs inside container
     depends_on:
       db:
         condition: service_healthy
