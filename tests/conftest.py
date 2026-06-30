@@ -42,8 +42,6 @@ else:
 
 
 # Engine - session-scoped, NullPool prevents cross-loop connection reuse
-
-
 @pytest_asyncio.fixture(scope="session")
 async def test_engine():
     """One engine for the whole session. NullPool = no connection is reused."""
@@ -57,8 +55,6 @@ async def test_engine():
 
 
 # Schema lifecycle - drop/create once per session
-
-
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_db(test_engine):
     """Drop + create all tables once at session start, drop at session end."""
@@ -71,8 +67,6 @@ async def setup_db(test_engine):
 
 
 # Per-test DB session, each test gets a fresh rollbacked transation
-
-
 @pytest_asyncio.fixture  # function scope (default)
 async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
     """

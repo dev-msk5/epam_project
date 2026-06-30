@@ -1,10 +1,15 @@
 from contextlib import asynccontextmanager
 
+# FastAPI imports
 from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# logger configuration
+from app.logging_config import LoggingMiddleware, logger
+
+# database configuration
 from app.db.session import engine, get_session, init_db
 from app.models.document import Document
 from app.models.project import Project
@@ -18,8 +23,10 @@ async def lifespan(app: FastAPI):
     """Context manager for the application lifespan"""
     await init_db()
 
+    logger.info("Application starting...")
+
     async with AsyncSession(engine) as session:
-        # Seed: test_user
+        # Test User
         result = await session.execute(select(User).where(User.login == "test_user"))
         existing_user = result.scalar_one_or_none()
 
@@ -33,11 +40,10 @@ async def lifespan(app: FastAPI):
             session.add(new_user)
             await session.flush()
 
-        # Seed: Test Project
+        # Test Project
         result = await session.execute(
             select(Project).where(
-                (Project.name == "Test Project") & (
-                    Project.owner_id == new_user.id)
+                (Project.name == "Test Project") & (Project.owner_id == new_user.id)
             )
         )
         existing_project = result.scalar_one_or_none()
@@ -53,7 +59,7 @@ async def lifespan(app: FastAPI):
             session.add(new_project)
             await session.flush()
 
-        # Seed: Test Document
+        # Test Document
         result = await session.execute(
             select(Document).where(
                 (Document.name == "Test Document")
@@ -84,9 +90,6 @@ app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(documents.router)
 
-# Frontend after API routers, serving static files from the /frontend directory
-app.mount("/", StaticFiles(directory="src/frontend", html=True), name="static")
-
 
 @app.get("/health")
 async def health():
@@ -102,3 +105,10 @@ async def health_db(db: AsyncSession = Depends(get_session)):
         return {"status": "ok", "database": "connected"}
     except Exception as e:
         return {"status": "error", "database": str(e)}
+
+
+# Frontend after API routers, serving static files from the /frontend directory
+app.mount("/", StaticFiles(directory="src/frontend", html=True), name="static")
+
+# Register the logging middleware at the top of the stack
+app.add_middleware(LoggingMiddleware)

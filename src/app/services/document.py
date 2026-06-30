@@ -15,8 +15,10 @@ from app.models.project import Project
 from app.pydantic_schemas.document import DocumentDownloadOut, DocumentOut
 from app.s3 import S3Service
 
-log = logging.getLogger(__name__)
-# Only allow PDF and DOCX to prevent arbitrary file uploads and reduce security surface
+# Initialize app logger
+logger = logging.getLogger("app_logger")
+
+# Only allow PDF and DOCX to prevent arbitrary file uploads and reduce attack surface
 ALLOWED_EXT = {".pdf", ".docx"}
 
 
@@ -39,11 +41,13 @@ class DocumentService:
         """
         name = (name or "").strip().replace("\\", "/").split("/")[-1]
         if not name or name.startswith("."):
+            logger.warning(f"Sanitization rejected file name: '{name}'")
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid filename")
         base, dot, ext = name.rpartition(".")
         ext = f".{ext.lower()}" if dot else ""
         base = re.sub(r"[^a-zA-Z0-9._-]", "_", base).strip("._-")
         if not base or ext not in ALLOWED_EXT:
+            logger.warning(f"File extension rejected or empty base: extension={ext}")
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 f"Allowed extensions: {sorted(ALLOWED_EXT)}",
@@ -66,13 +70,10 @@ class DocumentService:
         project = (
             await session.execute(
                 select(Project).where(Project.id == project_id).with_for_update()
-                # Fetch the project with this ID,
-                # lock it so no other transaction can modify it while occupied
-                # One Project row is expected, if more than one, it will raise an error
-                # (should not happen with proper DB constraints)
             )
         ).scalar_one_or_none()
         if not project:
+            logger.warning(f"Project not found during locking: ID {project_id}")
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
         return project
 
@@ -86,6 +87,7 @@ class DocumentService:
         ).scalar_one_or_none()
 
         if not project:
+            logger.warning(f"Access check failed: Project {project_id} not found")
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
 
         if project.owner_id == user_id:
@@ -101,6 +103,9 @@ class DocumentService:
         ).scalar_one_or_none()
 
         if not role:
+            logger.warning(
+                f"Access check denied: User {user_id} requested access to Project {project_id}"
+            )
             raise HTTPException(status.HTTP_403_FORBIDDEN, "No access")
 
         return role
@@ -108,7 +113,7 @@ class DocumentService:
     @staticmethod
     async def _project_usage(session: AsyncSession, project_id: int) -> int:
         """
-        Calculate total storage used by all documents in a project (including pending).
+        Calculate total storage used by all documents in a project (including pending)
 
         Uses SQL SUM aggregation to compute total size in bytes
         Returns 0 if no documents exist (via COALESCE)
@@ -118,8 +123,6 @@ class DocumentService:
             (
                 await session.execute(
                     select(func.coalesce(func.sum(Document.size), 0)).where(
-                        # Compute the total size of all documents in this project,
-                        # if no documents, return 0
                         Document.project_id == project_id
                     )
                 )
@@ -129,9 +132,9 @@ class DocumentService:
     @staticmethod
     async def _file_size(file: UploadFile) -> int:
         """
-        Get file size by seeking to EOF without reading entire content into memory.
+        Get file size by seeking to EOF without reading entire content into memory
 
-        Restores original file position after measurement to avoid side effects.
+        Restores original file position after measurement to avoid side effects
         This method is lightweight and called before quota checks to early-reject
         oversized uploads.
         """
@@ -155,8 +158,12 @@ class DocumentService:
         for key in keys:
             try:
                 await S3Service.delete_file(key)
-            except Exception:
-                log.exception("Failed to delete S3 object: %s", key)
+                logger.info(f"S3 file deleted successfully: {key}")
+            except Exception as e:
+                logger.error(
+                    f"Failed to delete S3 object: {key} | Error: {str(e)}",
+                    exc_info=True,
+                )
 
     # Public methods for document operations (upload, list, update, delete, download)
 
@@ -185,6 +192,9 @@ class DocumentService:
 
         used = await cls._project_usage(session, project_id)
         if used + total > settings.PROJECT_STORAGE_LIMIT_BYTES:
+            logger.warning(
+                f"Upload rejected: Project {project_id} storage limit exceeded during multi-upload"
+            )
             raise HTTPException(
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Quota exceeded"
             )
@@ -224,9 +234,16 @@ class DocumentService:
             await session.commit()
             for doc in docs:
                 await session.refresh(doc)
+            logger.info(
+                f"User {user_id} successfully uploaded {len(docs)} documents to Project {project_id}"
+            )
             return [DocumentOut.model_validate(d) for d in docs]
 
-        except Exception:
+        except Exception as e:
+            logger.error(
+                f"Upload execution failed for Project {project_id} | Error: {str(e)}",
+                exc_info=True,
+            )
             # Clean up S3 files that were uploaded
             await cls._cleanup_s3(uploaded)
 
@@ -299,6 +316,7 @@ class DocumentService:
             )
         ).scalar_one_or_none()
         if not doc:
+            logger.warning(f"Document update failed: ID {document_id} not found")
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
         # any project member (owner or participant) may update
         # no longer tied to who originally uploaded the file
@@ -308,6 +326,9 @@ class DocumentService:
         size = await cls._file_size(file)
         used = await cls._project_usage(session, doc.project_id)
         if used - int(doc.size or 0) + size > settings.PROJECT_STORAGE_LIMIT_BYTES:
+            logger.warning(
+                f"Update rejected: Project {doc.project_id} limit exceeded during document {document_id} replace"
+            )
             raise HTTPException(
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Quota exceeded"
             )
@@ -317,6 +338,9 @@ class DocumentService:
             f"projects/{doc.project_id}/documents/{doc.id}_{uuid.uuid4().hex}_{name}"
         )
         try:
+            logger.info(
+                f"User {user_id} is replacing content of Document {document_id} in Project {doc.project_id}"
+            )
             # seek to the beginning before uploading so S3 receives
             # the full file content and not 0 bytes
             file.file.seek(0)
@@ -328,7 +352,14 @@ class DocumentService:
             doc.name, doc.url, doc.size, doc.is_pending = name, new_key, size, False
             await session.commit()
             await session.refresh(doc)
-        except Exception:
+            logger.info(
+                f"Document {document_id} successfully replaced by User {user_id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Replace execution failed for Document {document_id} | Error: {str(e)}",
+                exc_info=True,
+            )
             await cls._cleanup_s3([new_key])
             raise
 
@@ -362,19 +393,27 @@ class DocumentService:
             )
         ).scalar_one_or_none()
         if not doc:
+            logger.warning(f"Document deletion failed: ID {document_id} not found")
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
         # only the project OWNER may delete, role-based, not document-uploader-based
-        # This is the rule the spec requires:
-        # "participant: can modify, cannot delete"
         role = await cls._get_role(session, doc.project_id, user_id)
         if role != "owner":
+            logger.warning(
+                f"Permission denied: User {user_id} tried to delete Document {document_id} (Participant status)"
+            )
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN, "Only project owner can delete"
             )
 
+        logger.info(
+            f"User {user_id} is deleting Document {document_id} from Project {doc.project_id}"
+        )
         key = doc.url
         await session.delete(doc)
         await session.commit()
+        logger.info(
+            f"Document {document_id} successfully cleared from DB by User {user_id}"
+        )
         if key:
             await cls._cleanup_s3([key])
 
@@ -393,19 +432,26 @@ class DocumentService:
         - User is a project member
         - Document is not pending (upload completed)
 
-        Returns: Pydantic model with document metadata + signed S3 download URL.
-        The download URL has expiration enforced by S3 (prevents long-term sharing).
+        Returns: Pydantic model with document metadata + signed S3 download URL
+        The download URL has expiration enforced by S3 (prevents long term sharing)
         """
         doc = (
             await session.execute(select(Document).where(Document.id == document_id))
         ).scalar_one_or_none()
         if not doc:
+            logger.warning(f"Download request failed: Document {document_id} not found")
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
         await cls._get_role(session, doc.project_id, user_id)
         if doc.is_pending:
+            logger.warning(
+                f"Download request rejected: Document {document_id} is currently processing"
+            )
             raise HTTPException(
                 status.HTTP_409_CONFLICT, "Document is still being processed"
             )
+        logger.info(
+            f"User {user_id} successfully generated download token for Document {document_id}"
+        )
         return DocumentDownloadOut(
             **DocumentOut.model_validate(doc).model_dump(),
             download_url=S3Service.generate_download_url(doc.url),

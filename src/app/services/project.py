@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import logging
 import time
 from typing import List
 
@@ -15,6 +16,9 @@ from app.models.project import Project
 from app.models.user import User
 from app.pydantic_schemas.project import ProjectCreate, ProjectUpdate
 from app.s3 import S3Service
+
+# Initialize app logger
+logger = logging.getLogger("app_logger")
 
 
 class ProjectService:
@@ -33,6 +37,7 @@ class ProjectService:
         )
         project = project_query.scalar_one_or_none()
         if not project:
+            logger.warning(f"Project not found: ID {project_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Project not found",
@@ -42,6 +47,9 @@ class ProjectService:
             return project
 
         if require_owner:
+            logger.warning(
+                f"Permission denied: User {user_id} is not the owner of Project {project_id}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only the project owner can perform this action",
@@ -54,6 +62,9 @@ class ProjectService:
         )
         access_entry = access_query.scalar_one_or_none()
         if not access_entry:
+            logger.warning(
+                f"Access denied: User {user_id} requested Project {project_id}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have access to this project",
@@ -66,6 +77,7 @@ class ProjectService:
         cls, session: AsyncSession, project_data: ProjectCreate, owner_id: int
     ) -> Project:
         """Creates a new project record. The creator automatically becomes the owner"""
+        logger.info(f"User {owner_id} is creating project: {project_data.name}")
         new_project = Project(
             name=project_data.name,
             description=project_data.description,
@@ -87,6 +99,7 @@ class ProjectService:
             .options(selectinload(Project.documents))
             .where(Project.id == new_project.id)
         )
+        logger.info(f"Project {new_project.id} successfully created by User {owner_id}")
         return result.scalar_one()
 
     @classmethod
@@ -125,9 +138,10 @@ class ProjectService:
         user_id: int,
         project_data: ProjectUpdate,
     ) -> Project:
-        """Modifies project details. Only the owner can update the project"""
+        """Modifies project details. Participants can modify, but cannot delete"""
         project = await cls._verify_access(session, project_id, user_id)
 
+        logger.info(f"User {user_id} is updating project: {project_id}")
         if project_data.name is not None:
             project.name = project_data.name
         if project_data.description is not None:
@@ -140,6 +154,7 @@ class ProjectService:
             .options(selectinload(Project.documents))
             .where(Project.id == project.id)
         )
+        logger.info(f"Project {project_id} successfully updated by User {user_id}")
         return result.scalar_one()
 
     @classmethod
@@ -154,6 +169,8 @@ class ProjectService:
             session, project_id, user_id, require_owner=True
         )
 
+        logger.info(f"User {user_id} requested deletion of Project {project_id}")
+
         # Fetch ONLY the S3 URLs as raw strings
         url_query = await session.execute(
             select(Document.url).where(Document.project_id == project_id)
@@ -167,14 +184,17 @@ class ProjectService:
 
         # Lock down state changes in the DB
         await session.commit()
+        logger.info(f"Project {project_id} and metadata successfully cleared from DB")
 
         # Clean up S3 assets post-commit. If this fails, data integrity is still intact
         for key in s3_keys:
             try:
                 await S3Service.delete_file(key)
-            except Exception:
-                pass  # Orphaned files can be safely ignored,
-                # or cleaned by lifecycle policies
+                logger.info(f"S3 file deleted successfully: {key}")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to delete S3 file: {key} during project deletion | Error: {str(e)}"
+                )
 
     @classmethod
     async def share_project(
@@ -186,9 +206,13 @@ class ProjectService:
         ttl_seconds: int = 86400,
     ) -> dict:
         """
-        Generates a tokenized join link with a strict expiration window.
+        Generates a tokenized join link with a strict expiration window
         """
         await cls._verify_access(session, project_id, owner_id, require_owner=True)
+
+        logger.info(
+            f"User {owner_id} is generating a share token for {email} on Project {project_id}"
+        )
 
         # Set explicit expiration timestamp (eg. 24 hours from now)
         expires_at = int(time.time()) + ttl_seconds
@@ -202,6 +226,9 @@ class ProjectService:
 
         join_url = f"https://testdomain123456.com/join?project_id={project_id}&email={email}&expires_at={expires_at}&token={token}"
 
+        logger.info(
+            f"Share link successfully generated for {email} on Project {project_id}"
+        )
         return {
             "message": f"Share link generated successfully for {email}.",
             "join_url": join_url,
@@ -222,17 +249,27 @@ class ProjectService:
         # Verify owner
         await cls._verify_access(session, project_id, owner_id, require_owner=True)
 
+        logger.info(
+            f"User {owner_id} is inviting '{invited_login}' to Project {project_id}"
+        )
+
         # Find user to invite
         invited_user = (
             await session.execute(select(User).where(User.login == invited_login))
         ).scalar_one_or_none()
 
         if not invited_user:
+            # User does not exist
+            logger.warning(f"Failed to invite user: '{invited_login}' does not exist")
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND, f"User '{invited_login}' not found"
             )
 
         if invited_user.id == owner_id:
+            # Self invite check
+            logger.warning(
+                f"User {owner_id} attempted to self-invite to Project {project_id}"
+            )
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot invite yourself")
 
         # Check if already has access
@@ -245,6 +282,9 @@ class ProjectService:
         ).scalar_one_or_none()
 
         if existing:
+            logger.warning(
+                f"User '{invited_login}' already has access to Project {project_id}"
+            )
             raise HTTPException(status.HTTP_409_CONFLICT, "User already has access")
 
         # Grant access
@@ -254,6 +294,9 @@ class ProjectService:
         session.add(access)
         await session.commit()
 
+        logger.info(
+            f"User '{invited_login}' successfully joined Project {project_id} as participant"
+        )
         return {
             "message": f"User '{invited_login}' invited successfully",
             "project_id": project_id,

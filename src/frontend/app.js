@@ -1,29 +1,19 @@
 'use strict';
 
-/* =========================================================================
- * Config
- * =======================================================================*/
+/* Config*/
 const API_BASE = window.location.origin; // same host, API served on same EC2
 const TOKEN_KEY = 'access_token';
 
-/* =========================================================================
- * Tiny in-memory state (token is also persisted to localStorage)
- * =======================================================================*/
-const state = {
-  token: localStorage.getItem(TOKEN_KEY) || null,
-  userId: null,
-  projects: [], // cached list for the dashboard
-};
+/* Utilities */
 
-/* =========================================================================
- * Utilities
- * =======================================================================*/
+// Escapes special characters to prevent XSS when rendering user input directly into HTML
 function escapeHtml(str) {
   return String(str ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
 }
 
+// Converts a raw byte count into a clean, human-readable string (eg. 2,5 MB)
 function formatBytes(bytes) {
   if (bytes == null || Number.isNaN(bytes)) return '';
   if (bytes === 0) return '0 B';
@@ -33,6 +23,7 @@ function formatBytes(bytes) {
   return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
+// Extracts and parses the JSON payload from a standard JWT token
 function decodeJwt(token) {
   try {
     const payload = token.split('.')[1];
@@ -49,36 +40,52 @@ function decodeJwt(token) {
   }
 }
 
-// The exact claim name for the user's id isn't fixed by the spec, so we
-// check the common conventions a FastAPI/JWT backend might use.
+// Checks common claim keys (sub, uid, etc.) to pull the user's ID out of the JWT
 function getUserIdFromToken(token) {
   const payload = decodeJwt(token);
   if (!payload) return null;
   return payload.user_id ?? payload.uid ?? payload.id ?? payload.sub ?? null;
 }
 
-/* =========================================================================
- * Auth state helpers
- * =======================================================================*/
+// Standardizes the document array from various backend JSON shapes so the UI doesnt break
+function extractDocuments(res) {
+  return Array.isArray(res) ? res : (res && res.documents) || [];
+}
+
+/* 
+ * In-memory state (token is also persisted to localStorage)
+ * Calculated immediately to prevent redundant deferred initialization */
+const initialToken = localStorage.getItem(TOKEN_KEY) || null;
+const state = {
+  token: initialToken,
+  userId: initialToken ? getUserIdFromToken(initialToken) : null,
+  projects: [], 
+};
+
+/* Auth state helpers */
+
+// Stores a new JWT in localStorage and memory, then decodes the user's ID
 function setToken(token) {
   state.token = token;
   localStorage.setItem(TOKEN_KEY, token);
   state.userId = getUserIdFromToken(token);
 }
 
+// Cleans up all credentials and session details to sign the user out
 function clearToken() {
   state.token = null;
   state.userId = null;
   localStorage.removeItem(TOKEN_KEY);
 }
 
+// Simple check to verify if an active session token is loaded in memory
 function isLoggedIn() {
   return !!state.token;
 }
 
-/* =========================================================================
- * API layer
- * =======================================================================*/
+/* API layer */
+
+// Custom error class to carry HTTP status codes alongside API rejection details.
 class ApiError extends Error {
   constructor(status, message, detail) {
     super(message);
@@ -87,9 +94,19 @@ class ApiError extends Error {
   }
 }
 
+// Central fetch wrapper that sets up content-types, attaches JWT headers, and kicks users to login on 401s
 async function apiFetch(path, { method = 'GET', body, isForm = false } = {}) {
   const headers = {};
-  if (!isForm && body !== undefined) headers['Content-Type'] = 'application/json';
+  let reqBody = undefined;
+
+  if (body !== undefined) {
+    if (isForm) {
+      reqBody = body; // Let the browser set multipart/form-data boundaries automatically
+    } else {
+      headers['Content-Type'] = 'application/json';
+      reqBody = JSON.stringify(body);
+    }
+  }
 
   const isAuthRoute = path.startsWith('/auth') || path.startsWith('/login');
   if (state.token && !isAuthRoute) {
@@ -101,7 +118,7 @@ async function apiFetch(path, { method = 'GET', body, isForm = false } = {}) {
     res = await fetch(API_BASE + path, {
       method,
       headers,
-      body: body === undefined ? undefined : (isForm ? body : JSON.stringify(body)),
+      body: reqBody,
     });
   } catch (networkErr) {
     throw new ApiError(0, 'Network error — check your connection and try again.');
@@ -143,6 +160,7 @@ async function apiFetch(path, { method = 'GET', body, isForm = false } = {}) {
   return res;
 }
 
+// Wrapper for apiFetch that automatically parses and returns JSON if the response has content
 async function apiJson(path, opts) {
   const res = await apiFetch(path, opts);
   if (res.status === 204) return null;
@@ -151,8 +169,7 @@ async function apiJson(path, opts) {
   return null;
 }
 
-// Handles either a JSON body carrying a (presigned) URL, or a raw file
-// stream, since the spec doesn't pin down which one /document/{id} returns.
+// Handles downloading a document, either by launching an S3 presigned URL or creating a local blob link
 async function downloadDocument(docId, suggestedName) {
   const res = await apiFetch(`/document/${docId}`);
   const contentType = res.headers.get('content-type') || '';
@@ -178,9 +195,9 @@ async function downloadDocument(docId, suggestedName) {
   URL.revokeObjectURL(blobUrl);
 }
 
-/* =========================================================================
- * Router
- * =======================================================================*/
+/* Router */
+
+// Programmatically changes the URL hash to trigger a page transition
 function navigate(path) {
   if (location.hash.slice(1) !== path) {
     location.hash = path;
@@ -189,10 +206,12 @@ function navigate(path) {
   }
 }
 
+// Returns the current route based on URL hash, defaulting to '/login' if empty
 function currentRoute() {
   return location.hash.slice(1) || '/login';
 }
 
+// Simple hash router that validates auth state and chooses which layout function to execute
 function render() {
   const route = currentRoute();
   const topbar = document.getElementById('topbar');
@@ -222,19 +241,16 @@ function render() {
 }
 
 window.addEventListener('hashchange', render);
-window.addEventListener('DOMContentLoaded', () => {
-  if (state.token) state.userId = getUserIdFromToken(state.token);
-  render();
-});
+window.addEventListener('DOMContentLoaded', render);
 
 document.getElementById('logoutBtn').addEventListener('click', () => {
   clearToken();
   navigate('/login');
 });
 
-/* =========================================================================
- * View: Login / Register
- * =======================================================================*/
+/* View: Login / Register */
+
+// Renders the auth card and manages form submissions for logging in and registering
 function renderLogin() {
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -329,9 +345,9 @@ function renderLogin() {
   });
 }
 
-/* =========================================================================
- * View: Dashboard (project list)
- * =======================================================================*/
+/* View: Dashboard (project list) */
+
+// Renders the workspace dashboard containing the user's project grid and project creation modal
 async function renderDashboard() {
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -418,9 +434,9 @@ async function renderDashboard() {
   await loadProjects();
 }
 
-/* =========================================================================
- * View: Project detail
- * =======================================================================*/
+/* View: Project detail */
+
+// Loads project details, manages S3 uploads, file downloads, and restricts workspace features (invite/delete) to project owners
 async function renderProjectDetail(id) {
   const app = document.getElementById('app');
   app.innerHTML = '<p class="muted">Loading project…</p>';
@@ -430,7 +446,7 @@ async function renderProjectDetail(id) {
   try {
     project = await apiJson(`/project/${id}/info`);
     const docsRes = await apiJson(`/project/${id}/documents`);
-    documents = Array.isArray(docsRes) ? docsRes : (docsRes && docsRes.documents) || [];
+    documents = extractDocuments(docsRes);
   } catch (err) {
     app.innerHTML = `
       <div class="error-banner">${escapeHtml(err.message)}</div>
@@ -550,7 +566,7 @@ async function renderProjectDetail(id) {
 
     list.querySelectorAll('.doc-row').forEach((row) => {
       const docId = row.dataset.id;
-      const doc = documents.find((d) => String(d.id) === docId);
+      const doc = documents.find((d) => String(d.id) !== docId);
 
       row.querySelector('.doc-download').addEventListener('click', async () => {
         try {
@@ -595,7 +611,7 @@ async function renderProjectDetail(id) {
     try {
       await apiFetch(`/project/${id}/documents`, { method: 'POST', body: fd, isForm: true });
       const refreshed = await apiJson(`/project/${id}/documents`);
-      documents = Array.isArray(refreshed) ? refreshed : (refreshed && refreshed.documents) || [];
+      documents = extractDocuments(refreshed);
       renderDocs();
       e.target.reset();
       showNotice('Uploaded.');
@@ -605,14 +621,14 @@ async function renderProjectDetail(id) {
   });
 }
 
-/* =========================================================================
- * View: 404
- * =======================================================================*/
+/* View: 404 */
+
+// fallback view that renders an error card if the user hits an invalid hash route
 function renderNotFound() {
   document.getElementById('app').innerHTML = `
     <div class="card">
       <p>Page not found.</p>
-      <button id="homeBtn" class="btn btn-primary" type="button">Go to dashaboard</button>
+      <button id="homeBtn" class="btn btn-primary" type="button">Go to dashboard</button>
     </div>
   `;
   document.getElementById('homeBtn').addEventListener('click', () => navigate('/dashboard'));
