@@ -16,11 +16,13 @@ RUN pip install --no-cache-dir -e ".[dev]"
 # Copy the rest of the project (code changes won't invalidate the pip layer)
 COPY . .
 
+
+
 # Security: don't run as root
 RUN adduser --disabled-password --no-create-home appuser
-USER appuser
-
+# Create logging dir
 RUN mkdir -p /app/logs
+USER appuser
 
 # Make sure app package is importable, NO SRC in imports
 ENV PYTHONPATH=/app/src
