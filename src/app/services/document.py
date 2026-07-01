@@ -9,11 +9,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.access import Access
 from app.models.document import Document
 from app.models.project import Project
 from app.pydantic_schemas.document import DocumentDownloadOut, DocumentOut
 from app.s3 import S3Service
+from app.services.project import ProjectService
 
 # Initialize app logger
 logger = logging.getLogger("app_logger")
@@ -78,38 +78,6 @@ class DocumentService:
         return project
 
     @staticmethod
-    async def _get_role(session: AsyncSession, project_id: int, user_id: int) -> str:
-        """Returns the role of the user in the project (owner or participant)
-        or raises HTTPException if no access"""
-        # check if owner first
-        project = (
-            await session.execute(select(Project).where(Project.id == project_id))
-        ).scalar_one_or_none()
-
-        if not project:
-            logger.warning(f"Access check failed: Project {project_id} not found")
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
-
-        if project.owner_id == user_id:
-            return "owner"
-
-        # check Access table for participants
-        role = (
-            await session.execute(
-                select(Access.role).where(
-                    Access.project_id == project_id, Access.user_id == user_id
-                )
-            )
-        ).scalar_one_or_none()
-
-        if not role:
-            logger.warning(
-                f"Access check denied: User {user_id} requested access to Project {project_id}"  # noqa: E501
-            )
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "No access")
-
-        return role
-
     @staticmethod
     async def _project_usage(session: AsyncSession, project_id: int) -> int:
         """
@@ -181,7 +149,12 @@ class DocumentService:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "No files provided")
 
         project = await cls._lock_project(session, project_id)  # noqa: F841
-        await cls._get_role(session, project_id, user_id)
+        await ProjectService._resolve_access(
+            session,
+            project_id,
+            user_id,
+            project=project,
+        )
 
         items, total = [], 0
         for f in files:
@@ -247,11 +220,8 @@ class DocumentService:
             # Clean up S3 files that were uploaded
             await cls._cleanup_s3(uploaded)
 
-            # ✅ Rollback DB changes — this discards all pending inserts
+            # Rollback DB changes, discards all pending inserts
             await session.rollback()
-
-            # ❌ DO NOT try to delete docs here — rollback already discarded them
-            # The session is now clean; no manual delete needed
 
             raise
 
@@ -267,11 +237,11 @@ class DocumentService:
 
         Filters:
         - Only documents belonging to this project
-        - Only non-pending (is_pending=False) — in-progress uploads excluded
+        - Only non-pending (is_pending=False) -in-progress uploads excluded
 
         Access control: verifies user is a project member (any role).
         """
-        await cls._get_role(session, project_id, user_id)
+        await ProjectService._resolve_access(session, project_id, user_id)
         docs = (
             (
                 await session.execute(
@@ -320,7 +290,7 @@ class DocumentService:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
         # any project member (owner or participant) may update
         # no longer tied to who originally uploaded the file
-        await cls._get_role(session, doc.project_id, user_id)
+        await ProjectService._resolve_access(session, doc.project_id, user_id)
 
         name = cls._safe_filename(file.filename or "")
         size = await cls._file_size(file)
@@ -396,7 +366,7 @@ class DocumentService:
             logger.warning(f"Document deletion failed: ID {document_id} not found")
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
         # only the project OWNER may delete, role-based, not document-uploader-based
-        role = await cls._get_role(session, doc.project_id, user_id)
+        _, role = await ProjectService._resolve_access(session, doc.project_id, user_id)
         if role != "owner":
             logger.warning(
                 f"Permission denied: User {user_id} tried to delete Document {document_id} (Participant status)"  # noqa: E501
@@ -441,7 +411,7 @@ class DocumentService:
         if not doc:
             logger.warning(f"Download request failed: Document {document_id} not found")
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
-        await cls._get_role(session, doc.project_id, user_id)
+        await ProjectService._resolve_access(session, doc.project_id, user_id)
         if doc.is_pending:
             logger.warning(
                 f"Download request rejected: Document {document_id} is currently processing"  # noqa: E501

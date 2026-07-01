@@ -310,12 +310,12 @@ async def test_get_current_user_missing_sub_raises_401():
     assert exc.value.status_code == 401, (
         "Token with missing 'sub' should raise a 401 error"
     )
-    assert "invalid token payload" in exc.value.detail.lower(), (
-        "Error message should indicate invalid token payload"
+    assert "could not validate credentials" in exc.value.detail.lower(), (
+        "Error message should reflect the shared token validation path"
     )
 
 
-# require_owner
+# require owner
 
 
 def test_require_owner_passes_for_matching_user():

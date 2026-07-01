@@ -1,11 +1,10 @@
-import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.db.session import get_session
 from app.models.user import User
+from app.security import decode_access_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
@@ -18,21 +17,8 @@ async def get_current_user(
     Decodes the JWT token and returns the logged-in user.
     Raises 401 if token is missing, expired, or invalid.
     """
-    try:
-        payload = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-        )
-        user_id: str = payload.get("sub")
-        if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload"
-            )
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    user = await db.get(User, int(user_id))
+    user_id = decode_access_token(token)
+    user = await db.get(User, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User no longer exists"

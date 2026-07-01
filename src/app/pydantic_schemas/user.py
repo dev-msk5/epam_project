@@ -3,7 +3,14 @@
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PositiveInt,
+    field_validator,
+    model_validator,
+)
 
 
 class UserCreate(BaseModel):
@@ -12,6 +19,15 @@ class UserCreate(BaseModel):
     login: Annotated[str, Field(min_length=8, max_length=100)]
     password: Annotated[str, Field(min_length=8, max_length=100)]
     repeat_password: Annotated[str, Field(min_length=8, max_length=100)]
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, value: str) -> str:
+        if not any(c.isalpha() for c in value):
+            raise ValueError("Password must contain at least one letter")
+        if not any(c.isdigit() for c in value):
+            raise ValueError("Password must contain at least one digit")
+        return value
 
     @model_validator(mode="after")
     def passwords_match(self) -> "UserCreate":

@@ -23,20 +23,22 @@ logger = logging.getLogger("app_logger")
 
 class ProjectService:
     @staticmethod
-    async def _verify_access(
+    async def _resolve_access(
         session: AsyncSession,
         project_id: int,
         user_id: int,
         require_owner: bool = False,
-    ) -> Project:
+        project: Project | None = None,
+    ) -> tuple[Project, str]:
         """
-        Internal access resolver. Returns the Project model if authorized.
+        Internal access resolver. Returns the Project model and role if authorized.
         """
-        project_query = await session.execute(
-            select(Project).where(Project.id == project_id)
-        )
-        project = project_query.scalar_one_or_none()
-        if not project:
+        if project is None:
+            project_query = await session.execute(
+                select(Project).where(Project.id == project_id)
+            )
+            project = project_query.scalar_one_or_none()
+        if project is None:
             logger.warning(f"Project not found: ID {project_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -44,16 +46,7 @@ class ProjectService:
             )
 
         if project.owner_id == user_id:
-            return project
-
-        if require_owner:
-            logger.warning(
-                f"Permission denied: User {user_id} is not the owner of Project {project_id}"  # noqa: E501
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the project owner can perform this action",
-            )
+            return project, "owner"
 
         access_query = await session.execute(
             select(Access).where(
@@ -61,7 +54,7 @@ class ProjectService:
             )
         )
         access_entry = access_query.scalar_one_or_none()
-        if not access_entry:
+        if access_entry is None:
             logger.warning(
                 f"Access denied: User {user_id} requested Project {project_id}"
             )
@@ -70,7 +63,17 @@ class ProjectService:
                 detail="You do not have access to this project",
             )
 
-        return project
+        role = access_entry.role or "participant"
+        if require_owner and role != "owner":
+            logger.warning(
+                f"Permission denied: User {user_id} is not the owner of Project {project_id}"  # noqa: E501
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the project owner can perform this action",
+            )
+
+        return project, role
 
     @classmethod
     async def create_project(
@@ -122,7 +125,7 @@ class ProjectService:
     ) -> Project:
         """Returns project details if the user has access,
         otherwise raises an HTTPException"""
-        await cls._verify_access(session, project_id, user_id)
+        await cls._resolve_access(session, project_id, user_id)
         result = await session.execute(
             select(Project)
             .options(selectinload(Project.documents))
@@ -139,7 +142,7 @@ class ProjectService:
         project_data: ProjectUpdate,
     ) -> Project:
         """Modifies project details. Participants can modify, but cannot delete"""
-        project = await cls._verify_access(session, project_id, user_id)
+        project, _ = await cls._resolve_access(session, project_id, user_id)
 
         logger.info(f"User {user_id} is updating project: {project_id}")
         if project_data.name is not None:
@@ -165,7 +168,7 @@ class ProjectService:
         Deletes a project. Commits database erasure first to guarantee integrity,
         then purges S3 assets cleanly
         """
-        project = await cls._verify_access(
+        project, _ = await cls._resolve_access(
             session, project_id, user_id, require_owner=True
         )
 
@@ -208,7 +211,7 @@ class ProjectService:
         """
         Generates a tokenized join link with a strict expiration window
         """
-        await cls._verify_access(session, project_id, owner_id, require_owner=True)
+        await cls._resolve_access(session, project_id, owner_id, require_owner=True)
 
         logger.info(
             f"User {owner_id} is generating a share token for {email} on Project {project_id}"  # noqa: E501
@@ -247,7 +250,7 @@ class ProjectService:
         Only the project owner can invite
         """
         # Verify owner
-        await cls._verify_access(session, project_id, owner_id, require_owner=True)
+        await cls._resolve_access(session, project_id, owner_id, require_owner=True)
 
         logger.info(
             f"User {owner_id} is inviting '{invited_login}' to Project {project_id}"

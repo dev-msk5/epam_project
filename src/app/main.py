@@ -1,21 +1,17 @@
 from contextlib import asynccontextmanager
 
 # FastAPI imports
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # database configuration
-from app.db.session import engine, get_session, init_db
+from app.db.session import get_session, init_db
 
 # logger configuration
 from app.logging_config import LoggingMiddleware, logger
-from app.models.document import Document
-from app.models.project import Project
-from app.models.user import User
 from app.routes import auth, documents, projects
-from app.security import get_password_hash
 
 
 @asynccontextmanager
@@ -24,60 +20,6 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     logger.info("Application starting...")
-
-    async with AsyncSession(engine) as session:
-        # Test User
-        result = await session.execute(select(User).where(User.login == "test_user"))
-        existing_user = result.scalar_one_or_none()
-
-        if existing_user:
-            new_user = existing_user
-        else:
-            new_user = User(
-                login="test_user",
-                hashed_password=get_password_hash("test_password"),
-            )
-            session.add(new_user)
-            await session.flush()
-
-        # Test Project
-        result = await session.execute(
-            select(Project).where(
-                (Project.name == "Test Project") & (Project.owner_id == new_user.id)
-            )
-        )
-        existing_project = result.scalar_one_or_none()
-
-        if existing_project:
-            new_project = existing_project
-        else:
-            new_project = Project(
-                name="Test Project",
-                owner_id=new_user.id,
-                description="This is a test project.",
-            )
-            session.add(new_project)
-            await session.flush()
-
-        # Test Document
-        result = await session.execute(
-            select(Document).where(
-                (Document.name == "Test Document")
-                & (Document.project_id == new_project.id)
-            )
-        )
-        existing_document = result.scalar_one_or_none()
-
-        if not existing_document:
-            new_document = Document(
-                name="Test Document",
-                project_id=new_project.id,
-                url="http://example.com/test_document",
-                owner_id=new_user.id,
-            )
-            session.add(new_document)
-
-        await session.commit()
 
     # App runs
     yield
@@ -103,8 +45,12 @@ async def health_db(db: AsyncSession = Depends(get_session)):
     try:
         await db.execute(text("SELECT 1"))
         return {"status": "ok", "database": "connected"}
-    except Exception as e:
-        return {"status": "error", "database": str(e)}
+    except Exception:
+        logger.exception("Database health check failed")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable",
+        )
 
 
 # Frontend after API routers, serving static files from the /frontend directory
