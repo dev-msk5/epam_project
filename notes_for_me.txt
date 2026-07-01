@@ -1,5 +1,0 @@
-Pydantic Field + Typing Annotated - Great type checking and validation metadata / constraints  -- "This is an int, and Pydantic should validate it using the rules stored in Field(gt=0)."
-Field default_factory - generates a default value each time a model instance is created, This is especially useful for mutable defaults (lists, dicts, sets) and dynamically generated values (UUIDs, timestamps, etc.), since they would use the same [],{}
-Timestamps should be set server-side at the DB level, Remove created_at/updated_at from all Create and Update schemas
-
-command for db testing: docker compose exec -it db psql -U postgres -d test_db 
