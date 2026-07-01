@@ -47,6 +47,7 @@ LIMIT = 100
 
 @pytest.fixture(autouse=True)
 def lambda_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set the environment variables that the lambda expects to find"""
     monkeypatch.setenv("S3_BUCKET_NAME", BUCKET)
     monkeypatch.setenv("PROJECT_STORAGE_LIMIT_BYTES", str(LIMIT))
 
@@ -61,6 +62,7 @@ def reset_s3_singleton():
 
 @pytest.fixture()
 def aws_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock AWS credentials for moto"""
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
     monkeypatch.setenv("AWS_SECURITY_TOKEN", "testing")
@@ -70,6 +72,7 @@ def aws_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture()
 def s3_bucket(aws_credentials):
+    """Create a mock S3 bucket for testing"""
     with mock_aws():
         client = boto3.client("s3", region_name="us-east-1")
         client.create_bucket(Bucket=BUCKET)
@@ -77,7 +80,7 @@ def s3_bucket(aws_credentials):
 
 
 def _put_object(client, key: str, size_bytes: int) -> None:
-    """Helper: upload a fake object whose body is exactly *size_bytes* long."""
+    """upload a fake object whose body is exactly *size_bytes* long"""
     client.put_object(Bucket=BUCKET, Key=key, Body=b"x" * size_bytes)
 
 
@@ -85,46 +88,62 @@ def _put_object(client, key: str, size_bytes: int) -> None:
 
 
 class TestParseProjectId:
-    """Covers every branch of the regex helper. Pure logic - no AWS calls."""
+    """Covers every branch of the regex helper. Pure logic - no AWS calls"""
 
     def test_valid_key_returns_project_id(self):
-        assert s3_handler._parse_project_id("projects/42/documents/report.pdf") == 42
+        assert s3_handler._parse_project_id("projects/42/documents/report.pdf") == 42, (
+            "project_id should be parsed correctly from a valid key"
+        )
 
     def test_valid_key_with_nested_path(self):
         assert (
             s3_handler._parse_project_id("projects/7/documents/subdir/file.docx") == 7
-        )
+        ), "project_id should be parsed correctly from a valid key with nested path"  # noqa: E501
 
     def test_large_project_id(self):
         assert (
             s3_handler._parse_project_id("projects/9999999/documents/x.pdf")
             == 9_999_999
+        ), (
+            "project_id should be parsed correctly from a valid key with a large numeric project_id"  # noqa: E501
         )
 
     def test_wrong_prefix_returns_none(self):
-        assert s3_handler._parse_project_id("uploads/42/documents/file.pdf") is None
+        assert s3_handler._parse_project_id("uploads/42/documents/file.pdf") is None, (
+            "wrong top-level prefix should return None"
+        )
 
     def test_missing_documents_segment_returns_none(self):
-        assert s3_handler._parse_project_id("projects/42/file.pdf") is None
+        assert s3_handler._parse_project_id("projects/42/file.pdf") is None, (
+            "missing documents segment should return None"
+        )
 
     def test_non_numeric_project_id_returns_none(self):
-        assert s3_handler._parse_project_id("projects/abc/documents/file.pdf") is None
+        assert (
+            s3_handler._parse_project_id("projects/abc/documents/file.pdf") is None
+        ), "non-numeric project_id should return None"
 
     def test_empty_string_returns_none(self):
-        assert s3_handler._parse_project_id("") is None
+        assert s3_handler._parse_project_id("") is None, (
+            "empty string should return None"
+        )
 
     def test_root_key_returns_none(self):
-        assert s3_handler._parse_project_id("file.pdf") is None
+        assert s3_handler._parse_project_id("file.pdf") is None, (
+            "root key should return None"
+        )
 
     def test_project_id_zero(self):
-        assert s3_handler._parse_project_id("projects/0/documents/file.pdf") == 0
+        assert s3_handler._parse_project_id("projects/0/documents/file.pdf") == 0, (
+            "project_id of zero should be parsed correctly"
+        )
 
 
 # handler() - end-to-end with moto
 
 
 class TestHandler:
-    """Full handler() execution: routing, quota check, delete branch."""
+    """Full handler() execution: routing, quota check, delete branch"""
 
     #  helpers
 
@@ -140,7 +159,7 @@ class TestHandler:
             result = s3_handler.handler(
                 self._make_event("projects/10/documents/x.pdf"), None
             )
-        assert result == {"statusCode": 200}
+        assert result == {"statusCode": 200}, "handler should always return 200"
 
     def test_unknown_key_pattern_skipped(self, s3_bucket, caplog):
         with patch.object(s3_handler, "S3", s3_bucket):
@@ -148,18 +167,20 @@ class TestHandler:
                 result = s3_handler.handler(
                     self._make_event("unrecognised/path/file.pdf"), None
                 )
-        assert result == {"statusCode": 200}
-        assert "Unrecognised key pattern" in caplog.text
+        assert result == {"statusCode": 200}, "handler should always return 200"
+        assert "Unrecognised key pattern" in caplog.text, (
+            "handler should log a warning for unrecognised key patterns"
+        )
 
     def test_empty_records_list(self, s3_bucket):
         with patch.object(s3_handler, "S3", s3_bucket):
             result = s3_handler.handler({"Records": []}, None)
-        assert result == {"statusCode": 200}
+        assert result == {"statusCode": 200}, "handler should always return 200"
 
     def test_missing_records_key(self, s3_bucket):
         with patch.object(s3_handler, "S3", s3_bucket):
             result = s3_handler.handler({}, None)
-        assert result == {"statusCode": 200}
+        assert result == {"statusCode": 200}, "handler should always return 200"
 
     #  below-limit: file is kept
 
@@ -172,7 +193,9 @@ class TestHandler:
 
         # Object must still exist
         head = s3_bucket.head_object(Bucket=BUCKET, Key=key)
-        assert head["ContentLength"] == LIMIT - 1
+        assert head["ContentLength"] == LIMIT - 1, (
+            "Object should not be deleted if total size is under the limit"
+        )
 
     def test_exactly_at_limit_not_deleted(self, s3_bucket):
         """Boundary: total == LIMIT must NOT trigger deletion (> not >=)."""
@@ -183,7 +206,9 @@ class TestHandler:
             s3_handler.handler(self._make_event(key), None)
 
         head = s3_bucket.head_object(Bucket=BUCKET, Key=key)
-        assert head["ContentLength"] == LIMIT
+        assert head["ContentLength"] == LIMIT, (
+            "Object should not be deleted if total size equals the limit"
+        )
 
     #  over-limit: offending file is deleted
 
@@ -196,8 +221,12 @@ class TestHandler:
                 s3_handler.handler(self._make_event(key), None)
 
         # Assert on the specific project to avoid cross-test log pollution
-        assert "project_id=30 exceeded quota" in caplog.text
-        assert "projects/30/documents/big.pdf" in caplog.text
+        assert "project_id=30 exceeded quota" in caplog.text, (
+            "handler should log a warning when project exceeds quota"
+        )
+        assert "projects/30/documents/big.pdf" in caplog.text, (
+            "handler should log the specific file that exceeded the quota"
+        )
 
         with pytest.raises(Exception):
             s3_bucket.head_object(Bucket=BUCKET, Key=key)
@@ -216,7 +245,9 @@ class TestHandler:
                 s3_bucket.head_object(Bucket=BUCKET, Key=offending_key)
 
             head = s3_bucket.head_object(Bucket=BUCKET, Key=safe_key)
-            assert head["ContentLength"] == 60
+            assert head["ContentLength"] == 60, (
+                "Existing file should not be deleted when a new file causes the project to exceed its quota"  # noqa: E501
+            )
 
     #  error resilience
 
@@ -250,8 +281,12 @@ class TestHandler:
             with caplog.at_level("ERROR", logger=""):
                 result = s3_handler.handler(event, None)
 
-        assert result == {"statusCode": 200}
-        assert "Failed to calculate storage" in caplog.text
+        assert result == {"statusCode": 200}, (
+            " handler should continue processing after a _sum_project_size error"
+        )
+        assert "Failed to calculate storage" in caplog.text, (
+            " handler should log an error when _sum_project_size raises an exception"
+        )
 
     def test_delete_failure_logged_does_not_raise(self, s3_bucket, caplog):
         """If delete_object fails, the handler logs the error and still returns 200."""
@@ -265,8 +300,12 @@ class TestHandler:
             with caplog.at_level("ERROR", logger=""):
                 result = s3_handler.handler(self._make_event(key), None)
 
-        assert result == {"statusCode": 200}
-        assert "Failed to delete offending file" in caplog.text
+        assert result == {"statusCode": 200}, (
+            " handler should return 200 even if file deletion fails"
+        )
+        assert "Failed to delete offending file" in caplog.text, (
+            " handler should log an error when delete_object raises an exception"
+        )
 
     #  multi-record event
 
@@ -280,7 +319,13 @@ class TestHandler:
         with patch.object(s3_handler, "S3", s3_bucket):
             result = s3_handler.handler(self._make_event(key_a, key_b), None)
 
-        assert result == {"statusCode": 200}
+        assert result == {"statusCode": 200}, (
+            " handler should return 200 for multiple records"
+        )
         # Both files survive
-        assert s3_bucket.head_object(Bucket=BUCKET, Key=key_a)
-        assert s3_bucket.head_object(Bucket=BUCKET, Key=key_b)
+        assert s3_bucket.head_object(Bucket=BUCKET, Key=key_a), (
+            "File a.pdf should survive since its project is under the limit"
+        )
+        assert s3_bucket.head_object(Bucket=BUCKET, Key=key_b), (
+            "File b.pdf should survive since its project is under the limit"
+        )
