@@ -116,9 +116,6 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          target: runtime                  # prod stage, no dev tools
-          build-args: |
-            PYTHON_VERSION=${{ env.PYTHON_VERSION }}   # fixed: single source of truth
           push: ${{ fromJSON(github.ref == 'refs/heads/main' && github.event_name == 'push') }}
           tags: |
             ghcr.io/${{ env.IMAGE_NAME }}:latest
