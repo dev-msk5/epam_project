@@ -28,7 +28,10 @@ class User(Base):
     )
 
     projects: Mapped[list["Project"]] = relationship(
-        "Project", back_populates="owner", cascade="all, delete-orphan"
+        "Project",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     access_entries: Mapped[list["Access"]] = relationship(
         "Access", back_populates="user"

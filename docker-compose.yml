@@ -1,9 +1,13 @@
 services:
   app:
-    build: .
-    command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload
+    build:
+      context: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
       - PYTHONPATH=/app/src
+      - DB_USER=${DB_USER}                 # app needs these to connect to db
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
     ports:
       - "8000:8000"
     volumes:
@@ -24,9 +28,11 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]   # use actual user, containers own env
       interval: 5s
+      timeout: 5s
       retries: 5
+      start_period: 10s            # start period on first boot
 
 volumes:
-  pgdata:             # named volume, DB data persists between restarts
+  pgdata:

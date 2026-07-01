@@ -420,23 +420,39 @@ async function renderDashboard() {
       grid.innerHTML = '<p class="muted">No projects yet. Create your first one above.</p>';
       return;
     }
-    grid.innerHTML = state.projects.map((p) => {
+    grid.innerHTML = '';
+
+    state.projects.forEach((p) => {
       const isOwner = state.userId != null && String(p.owner_id) === String(state.userId);
       const docCount = Array.isArray(p.documents) ? p.documents.length : (p.document_count ?? 0);
-      return `
-        <button class="card project-card" type="button" data-id="${escapeHtml(String(p.id))}">
-          <div class="card-top">
-            <h3>${escapeHtml(p.name)}</h3>
-            <span class="badge ${isOwner ? 'badge-owner' : 'badge-participant'}">${isOwner ? 'Owner' : 'Participant'}</span>
-          </div>
-          <p class="card-desc">${escapeHtml(p.description || 'No description')}</p>
-          <p class="card-meta">${docCount} document${docCount === 1 ? '' : 's'}</p>
-        </button>
-      `;
-    }).join('');
 
-    grid.querySelectorAll('.project-card').forEach((card) => {
+      const card = document.createElement('button');
+      card.className = 'card project-card';
+      card.type = 'button';
+      card.dataset.id = String(p.id);
+
+      const cardTop = document.createElement('div');
+      cardTop.className = 'card-top';
+
+      const title = document.createElement('h3');
+      title.textContent = p.name || '';
+
+      const badge = document.createElement('span');
+      badge.className = `badge ${isOwner ? 'badge-owner' : 'badge-participant'}`;
+      badge.textContent = isOwner ? 'Owner' : 'Participant';
+
+      const description = document.createElement('p');
+      description.className = 'card-desc';
+      description.textContent = p.description || 'No description';
+
+      const meta = document.createElement('p');
+      meta.className = 'card-meta';
+      meta.textContent = `${docCount} document${docCount === 1 ? '' : 's'}`;
+
+      cardTop.append(title, badge);
+      card.append(cardTop, description, meta);
       card.addEventListener('click', () => navigate(`/project/${card.dataset.id}`));
+      grid.appendChild(card);
     });
   }
 
@@ -493,8 +509,8 @@ async function renderProjectDetail(id) {
           ${isOwner ? '<button id="deleteProjectBtn" class="btn btn-danger" type="button">Delete project</button>' : ''}
         </div>
         <form id="infoForm">
-          <label>Name <input name="name" value="${escapeHtml(project.name)}" required maxlength="120"></label>
-          <label>Description <textarea name="description" rows="3">${escapeHtml(project.description || '')}</textarea></label>
+          <label>Name <input name="name" value="" required maxlength="120"></label>
+          <label>Description <textarea name="description" rows="3"></textarea></label>
           <button type="submit" class="btn btn-primary">Save changes</button>
         </form>
       </section>
@@ -526,8 +542,12 @@ async function renderProjectDetail(id) {
 
   document.getElementById('backBtn').addEventListener('click', () => navigate('/dashboard'));
 
+  const infoForm = document.getElementById('infoForm');
+  infoForm.elements.name.value = project.name || '';
+  infoForm.elements.description.value = project.description || '';
+
   // Edit project info: PUT /project/{id}/info with name and description
-  document.getElementById('infoForm').addEventListener('submit', async (e) => {
+  infoForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const payload = { name: fd.get('name'), description: fd.get('description') };
@@ -543,7 +563,7 @@ async function renderProjectDetail(id) {
   // Owner only: delete project (and all its documents from DB + S3)
   if (isOwner) {
     document.getElementById('deleteProjectBtn').addEventListener('click', async () => {
-      if (!confirm(`Delete "${project.name}"? This also deletes its documents. This cannot be undone.`)) return;
+      if (!confirm(`Delete "${escapeHtml(project.name)}"? This also deletes its documents. This cannot be undone.`)) return;
       try {
         await apiFetch(`/project/${id}`, { method: 'DELETE' });
         navigate('/dashboard');

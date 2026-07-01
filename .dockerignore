@@ -2,3 +2,8 @@ venv/
 __pycache__/
 *.pyc
 .git
+__pycache__
+.pytest_cache
+.mypy_cache
+tests/
+*.egg-info

@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  PYTHON_VERSION: "3.12"
+  PYTHON_VERSION: "3.13"
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
@@ -29,10 +29,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      - name: Run ruff (lint)   # linter
+      - name: Run ruff (lint) # linter
         run: ruff check src tests
 
-      - name: Run ruff (format check)   # formatter
+      - name: Run ruff (format check) # formatter 
         run: ruff format --check src tests
 
   test:
@@ -56,10 +56,10 @@ jobs:
           --health-retries 5
 
     env:
-      DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_db
+      DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_db  # for testing
       SECRET_KEY: ci-test-secret-key-not-for-production-use-only-32bytes-safe
-      ACCESS_TOKEN_EXPIRE_MINUTES: 60
-      AWS_ACCESS_KEY_ID: testing        # needed by boto3, intercepted by moto
+      ACCESS_TOKEN_EXPIRE_MINUTES: 60   
+      AWS_ACCESS_KEY_ID: testing
       AWS_SECRET_ACCESS_KEY: testing
       AWS_DEFAULT_REGION: us-east-1
       S3_BUCKET_NAME: test-bucket
@@ -76,7 +76,6 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        # all test deps requirements-dev.txt
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
@@ -91,7 +90,6 @@ jobs:
           path: coverage.xml
           retention-days: 7
 
-  # Base CI requirement: build + push to registry on main merge
   build-and-push:
     name: Build and push Docker image
     runs-on: ubuntu-latest
@@ -118,7 +116,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          # explicit boolean cast via fromJSON
+          target: runtime                  # prod stage, no dev tools
+          build-args: |
+            PYTHON_VERSION=${{ env.PYTHON_VERSION }}   # fixed: single source of truth
           push: ${{ fromJSON(github.ref == 'refs/heads/main' && github.event_name == 'push') }}
           tags: |
             ghcr.io/${{ env.IMAGE_NAME }}:latest

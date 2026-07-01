@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -31,4 +31,9 @@ class Access(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "project_id", name="uq_user_project"),
+        # guard against typos in role assignment, allow 'owner' or 'participant'
+        CheckConstraint(
+            "role IN ('owner', 'participant')",
+            name="ck_role_valid",
+        ),
     )

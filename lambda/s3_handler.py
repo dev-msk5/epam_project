@@ -17,25 +17,35 @@ import boto3
 log = logging.getLogger()
 log.setLevel(logging.INFO)
 
-S3 = boto3.client("s3")
 BUCKET = os.environ["S3_BUCKET_NAME"]
-LIMIT_BYTES = int(os.environ.get(
-    "PROJECT_STORAGE_LIMIT_BYTES", 524_288_000))  # 500 MB
+LIMIT_BYTES = int(os.environ.get("PROJECT_STORAGE_LIMIT_BYTES", 524_288_000))  # 500 MB
 
 KEY_RE = re.compile(r"^projects/(?P<project_id>\d+)/documents/")
 
+S3 = None
+
+
+def _get_s3_client():
+    """Lazy singleton — created once on first call, reused on warm invocations."""
+    global S3
+    if S3 is None:
+        S3 = boto3.client("s3")
+    return S3
+
 
 def _parse_project_id(key: str) -> int | None:
-    """Parse project_id from S3 key. Returns None if key does not match expected pattern"""
+    """Parse project_id from S3 key.
+    Returns None if key does not match expected pattern"""
     m = KEY_RE.match(key)
     return int(m.group("project_id")) if m else None
 
 
 def _sum_project_size(project_id: int) -> int:
-    """Page through all S3 objects under projects/{project_id}/documents/ and sum sizes"""
+    """Page through all S3 objects under
+    projects/{project_id}/documents/ and sum sizes"""
     prefix = f"projects/{project_id}/documents/"
     total = 0
-    paginator = S3.get_paginator("list_objects_v2")
+    paginator = _get_s3_client().get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=BUCKET, Prefix=prefix):
         for obj in page.get("Contents", []):
             total += obj["Size"]
@@ -66,14 +76,14 @@ def handler(event, context):
 
         if total > LIMIT_BYTES:
             log.warning(
-                "project_id=%s exceeded quota: %s > %s bytes — deleting offending file: %s",
+                "project_id=%s exceeded quota: %s > %s bytes — deleting offending file: %s",  # noqa: E501
                 project_id,
                 total,
                 LIMIT_BYTES,
                 key,
             )
             try:
-                S3.delete_object(Bucket=BUCKET, Key=key)
+                _get_s3_client().delete_object(Bucket=BUCKET, Key=key)
                 log.info("Deleted offending file: %s", key)
             except Exception as exc:
                 log.error("Failed to delete offending file %s: %s", key, exc)

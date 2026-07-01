@@ -5,18 +5,15 @@ WORKDIR /app
 #Upgrade pip only (setuptools/wheel come from pyproject.toml build-system)
 RUN pip install --no-cache-dir --upgrade pip
 
-
 # reads pyproject.toml and immediately looks for the src/ directory
 COPY pyproject.toml .
 COPY src/ src/
 
-# Install all dependencies (cached layer - only reruns if pyproject.toml changes)
-RUN pip install --no-cache-dir -e ".[dev]"
+# Install runtime dependencies only, dev tools (pytest/ruff/mypy) don't in prod
+RUN pip install --no-cache-dir -e "."
 
 # Copy the rest of the project (code changes won't invalidate the pip layer)
 COPY . .
-
-
 
 # Security: don't run as root
 RUN adduser --disabled-password --no-create-home appuser

@@ -1,4 +1,4 @@
-# Integration tests for POST /auth and POST /login
+# Integration tests for POST /auth, POST /login, and token behaviour on GET /projects
 #
 # test_register - covered cases:
 #   valid registration returns 201 or 200
@@ -10,9 +10,11 @@
 #   duplicate login returns 409
 #   missing login field returns 422
 #   missing password field returns 422
+# missing repeat_password field returns 422
 #
 # test_login - covered cases:
 #   valid credentials return 200 + access_token + token_type bearer
+#   token subject (sub) matches authenticated user id
 #   wrong password returns 401
 #   non-existent login returns 401
 #   missing password field returns 422
@@ -24,6 +26,7 @@
 #   malformed token returns 401
 #   missing token returns 401
 #   tampered token (wrong signature) returns 401
+#   wrong auth scheme (Token instead of Bearer) returns 401
 
 from datetime import datetime, timedelta, timezone
 
