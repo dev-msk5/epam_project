@@ -2,17 +2,24 @@ services:
   app:
     build:
       context: .
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # For EC2 production: remove "--reload" as it degrades performance
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     environment:
       - PYTHONPATH=/app/src
-      - DB_USER=${DB_USER}                 # app needs these to connect to db
+      - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
+      # MINIMAL ADDITIONS FOR SSM
+      - USE_SSM=${USE_SSM:-false}               # Toggles SSM (defaults to false locally)
+      - AWS_REGION=${AWS_REGION:-us-east-1}     # Tells boto3 which region to query
+      - SSM_PATH=/project-dashboard/prod/       # Path namespace in SSM Parameter Store
     ports:
       - "8000:8000"
+    # On EC2 production, you should comment out the " - .:/app" volume 
+    # to use the baked Docker image layers instead of syncing your SSH folder.
     volumes:
-      - .:/app        # mirrors local folder into the container
-      - ./logs:/app/logs  # host:container, maps local ./logs to /app/logs inside container
+      - .:/app        
+      - ./logs:/app/logs
     depends_on:
       db:
         condition: service_healthy
@@ -28,11 +35,11 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]   # use actual user, containers own env
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
-      start_period: 10s            # start period on first boot
+      start_period: 10s
 
 volumes:
   pgdata:
