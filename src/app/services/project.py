@@ -51,8 +51,8 @@ class ProjectService:
                 f"Access denied: User {user_id} requested Project {project_id}"
             )
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have access to this project",
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found",
             )
 
         if require_owner and role != "owner":
