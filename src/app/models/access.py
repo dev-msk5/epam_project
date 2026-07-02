@@ -1,6 +1,14 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    select,
+)
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -37,3 +45,19 @@ class Access(Base):
             name="ck_role_valid",
         ),
     )
+
+    @classmethod
+    async def get_role_for_project(
+        cls,
+        session: AsyncSession,
+        project_id: int,
+        user_id: int,
+    ) -> str | None:
+        """Return the stored role for a user on a project, if any."""
+        result = await session.execute(
+            select(cls.role).where(
+                cls.project_id == project_id,
+                cls.user_id == user_id,
+            )
+        )
+        return result.scalar_one_or_none()

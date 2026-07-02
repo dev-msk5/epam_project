@@ -21,7 +21,7 @@
 #                            - different user_id raises 403
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt
 import pytest
@@ -29,6 +29,7 @@ from fastapi import HTTPException
 
 from app.config import settings
 from app.dependencies import get_current_user, require_owner
+from app.models.access import Access
 from app.security import (
     create_access_token,
     decode_access_token,
@@ -318,19 +319,28 @@ async def test_get_current_user_missing_sub_raises_401():
 # require owner
 
 
-def test_require_owner_passes_for_matching_user():
+@pytest.mark.anyio
+async def test_require_owner_passes_for_matching_user():
     mock_user = MagicMock()
     mock_user.id = 5
-    # should not raise
-    require_owner(project_owner_id=5, current_user=mock_user)
+    mock_db = AsyncMock()
+    with patch.object(
+        Access, "get_role_for_project", new=AsyncMock(return_value="owner")
+    ):
+        await require_owner(project_id=5, current_user=mock_user, db=mock_db)
 
 
-def test_require_owner_raises_403_for_wrong_user():
+@pytest.mark.anyio
+async def test_require_owner_raises_403_for_wrong_user():
     mock_user = MagicMock()
     mock_user.id = 8
+    mock_db = AsyncMock()
 
-    with pytest.raises(HTTPException) as exc:
-        require_owner(project_owner_id=5, current_user=mock_user)
+    with patch.object(
+        Access, "get_role_for_project", new=AsyncMock(return_value="participant")
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await require_owner(project_id=5, current_user=mock_user, db=mock_db)
 
     assert exc.value.status_code == 403, (
         "require_owner should raise 403 for a user that is not the owner"
@@ -340,15 +350,20 @@ def test_require_owner_raises_403_for_wrong_user():
     )
 
 
-def test_require_owner_raises_403_for_participant(
+@pytest.mark.anyio
+async def test_require_owner_raises_403_for_participant(
     test_participant, participant_headers
 ):
     # Simulate a participant user object trying to act as owner
     mock_participant = MagicMock()
     mock_participant.id = 99
+    mock_db = AsyncMock()
 
-    with pytest.raises(HTTPException) as exc:
-        require_owner(project_owner_id=1, current_user=mock_participant)
+    with patch.object(
+        Access, "get_role_for_project", new=AsyncMock(return_value="participant")
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await require_owner(project_id=1, current_user=mock_participant, db=mock_db)
 
     assert exc.value.status_code == 403, (
         " require_owner should raise 403 for a participant user that is not the owner"

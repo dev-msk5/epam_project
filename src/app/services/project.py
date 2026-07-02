@@ -5,7 +5,7 @@ import time
 from typing import List
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -45,16 +45,8 @@ class ProjectService:
                 detail="Project not found",
             )
 
-        if project.owner_id == user_id:
-            return project, "owner"
-
-        access_query = await session.execute(
-            select(Access).where(
-                Access.project_id == project_id, Access.user_id == user_id
-            )
-        )
-        access_entry = access_query.scalar_one_or_none()
-        if access_entry is None:
+        role = await Access.get_role_for_project(session, project_id, user_id)
+        if role is None:
             logger.warning(
                 f"Access denied: User {user_id} requested Project {project_id}"
             )
@@ -63,7 +55,6 @@ class ProjectService:
                 detail="You do not have access to this project",
             )
 
-        role = access_entry.role or "participant"
         if require_owner and role != "owner":
             logger.warning(
                 f"Permission denied: User {user_id} is not the owner of Project {project_id}"  # noqa: E501
@@ -79,15 +70,17 @@ class ProjectService:
     async def create_project(
         cls, session: AsyncSession, project_data: ProjectCreate, owner_id: int
     ) -> Project:
-        """Creates a new project record. The creator automatically becomes the owner"""
+        """
+        Creates a new project and its owner Access row atomically
+        """
         logger.info(f"User {owner_id} is creating project: {project_data.name}")
+
         new_project = Project(
             name=project_data.name,
             description=project_data.description,
-            owner_id=owner_id,
         )
         session.add(new_project)
-        await session.flush()  # get new_project.id before creating Access row
+        await session.flush()  # assigns new_project.id without committing
 
         owner_access = Access(
             project_id=new_project.id,
@@ -95,11 +88,17 @@ class ProjectService:
             role="owner",
         )
         session.add(owner_access)
+
+        # Single commit point, if anything above raised, nothing here runs,
+        # and get_session's context-manager close() rolls back the whole
+        # (still-open) transaction, so no orphan project or dangling access row.
         await session.commit()
 
         result = await session.execute(
             select(Project)
-            .options(selectinload(Project.documents))
+            .options(
+                selectinload(Project.documents), selectinload(Project.access_entries)
+            )
             .where(Project.id == new_project.id)
         )
         logger.info(f"Project {new_project.id} successfully created by User {owner_id}")
@@ -112,9 +111,11 @@ class ProjectService:
         """Returns a list of projects that the user owns or has access to"""
         query = await session.execute(
             select(Project)
-            .options(selectinload(Project.documents))
-            .join(Access, Access.project_id == Project.id, isouter=True)
-            .where(or_(Project.owner_id == user_id, Access.user_id == user_id))
+            .options(
+                selectinload(Project.documents), selectinload(Project.access_entries)
+            )
+            .join(Access, Access.project_id == Project.id)
+            .where(Access.user_id == user_id)
             .distinct()
         )
         return list(query.scalars().all())
@@ -128,7 +129,9 @@ class ProjectService:
         await cls._resolve_access(session, project_id, user_id)
         result = await session.execute(
             select(Project)
-            .options(selectinload(Project.documents))
+            .options(
+                selectinload(Project.documents), selectinload(Project.access_entries)
+            )
             .where(Project.id == project_id)
         )
         return result.scalar_one()
@@ -154,7 +157,9 @@ class ProjectService:
 
         result = await session.execute(
             select(Project)
-            .options(selectinload(Project.documents))
+            .options(
+                selectinload(Project.documents), selectinload(Project.access_entries)
+            )
             .where(Project.id == project.id)
         )
         logger.info(f"Project {project_id} successfully updated by User {user_id}")

@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_session
+from app.models.access import Access
 from app.models.user import User
 from app.security import decode_access_token
 
@@ -26,12 +27,17 @@ async def get_current_user(
     return user
 
 
-def require_owner(project_owner_id: int, current_user: User) -> None:
+async def require_owner(
+    project_id: int,
+    current_user: User,
+    db: AsyncSession,
+) -> None:
     """
     Raises 403 if current user is not the project owner.
     Used in DELETE /project and POST /project/invite.
     """
-    if project_owner_id != current_user.id:
+    role = await Access.get_role_for_project(db, project_id, current_user.id)
+    if role != "owner":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the project owner can perform this action",

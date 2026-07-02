@@ -6,6 +6,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import models  # noqa: F401  # register ORM models before create_all
+
 # database configuration
 from app.db.session import get_session, init_db
 

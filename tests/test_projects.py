@@ -61,6 +61,20 @@ from app.models.project import Project
 from app.models.user import User
 
 
+async def _make_project(
+    db_session: AsyncSession,
+    owner: User,
+    name: str,
+    description: str = "desc",
+) -> Project:
+    project = Project(name=name, description=description)
+    db_session.add(project)
+    await db_session.flush()
+    db_session.add(Access(user_id=owner.id, project_id=project.id, role="owner"))
+    await db_session.flush()
+    return project
+
+
 # create project
 async def test_create_project_success(
     client: AsyncClient, owner_headers: dict, db_session: AsyncSession, test_owner: User
@@ -114,15 +128,9 @@ async def test_create_project_unauthenticated(client: AsyncClient):
 async def test_get_projects_owner_sees_own(
     client: AsyncClient, db_session: AsyncSession, test_owner: User, owner_headers: dict
 ):
-    project = Project(
-        name="Visible Project", description="Owner can see this", owner_id=test_owner.id
+    project = await _make_project(
+        db_session, test_owner, "Visible Project", "Owner can see this"
     )
-    db_session.add(project)
-    await db_session.flush()
-
-    access = Access(user_id=test_owner.id, project_id=project.id, role="owner")
-    db_session.add(access)
-    await db_session.flush()
 
     response = await client.get("/projects", headers=owner_headers)
     assert response.status_code == 200, "owner list should succeed"
@@ -138,11 +146,7 @@ async def test_get_projects_participant_sees_invited(
     test_participant: User,
     participant_headers: dict,
 ):
-    project = Project(
-        name="Shared With Participant", description="desc", owner_id=test_owner.id
-    )
-    db_session.add(project)
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Shared With Participant")
 
     access = Access(
         user_id=test_participant.id, project_id=project.id, role="participant"
@@ -160,11 +164,7 @@ async def test_get_projects_participant_sees_invited(
 async def test_get_projects_excludes_inaccessible(
     client: AsyncClient, db_session: AsyncSession, test_owner: User, other_headers: dict
 ):
-    project = Project(
-        name="Hidden From Others", description="desc", owner_id=test_owner.id
-    )
-    db_session.add(project)
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Hidden From Others")
 
     # no Access row for other_user - project must not appear in their list
     response = await client.get("/projects", headers=other_headers)
@@ -195,14 +195,9 @@ async def test_get_projects_unauthenticated(client: AsyncClient):
 async def test_get_project_info_owner(
     client: AsyncClient, db_session: AsyncSession, test_owner: User, owner_headers: dict
 ):
-    project = Project(
-        name="Info Project", description="Details here", owner_id=test_owner.id
+    project = await _make_project(
+        db_session, test_owner, "Info Project", "Details here"
     )
-    db_session.add(project)
-    await db_session.flush()
-
-    db_session.add(Access(user_id=test_owner.id, project_id=project.id, role="owner"))
-    await db_session.flush()
 
     response = await client.get(f"/project/{project.id}/info", headers=owner_headers)
     assert response.status_code == 200, "owner info request should succeed"
@@ -218,11 +213,7 @@ async def test_get_project_info_participant(
     test_participant: User,
     participant_headers: dict,
 ):
-    project = Project(
-        name="Participant Info", description="desc", owner_id=test_owner.id
-    )
-    db_session.add(project)
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Participant Info")
 
     db_session.add(
         Access(user_id=test_participant.id, project_id=project.id, role="participant")
@@ -238,11 +229,7 @@ async def test_get_project_info_participant(
 async def test_get_project_info_no_access(
     client: AsyncClient, db_session: AsyncSession, test_owner: User, other_headers: dict
 ):
-    project = Project(
-        name="No Access Project", description="desc", owner_id=test_owner.id
-    )
-    db_session.add(project)
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "No Access Project")
 
     response = await client.get(f"/project/{project.id}/info", headers=other_headers)
     assert response.status_code in [403, 404], "user without access should be blocked"
@@ -256,11 +243,7 @@ async def test_get_project_info_not_found(client: AsyncClient, owner_headers: di
 async def test_get_project_info_unauthenticated(
     client: AsyncClient, db_session: AsyncSession, test_owner: User
 ):
-    project = Project(
-        name="Auth Guard Project", description="desc", owner_id=test_owner.id
-    )
-    db_session.add(project)
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Auth Guard Project")
 
     response = await client.get(f"/project/{project.id}/info")
     assert response.status_code == 401, "missing token should fail"
@@ -272,14 +255,7 @@ async def test_get_project_info_unauthenticated(
 async def test_update_project_owner(
     client: AsyncClient, db_session: AsyncSession, test_owner: User, owner_headers: dict
 ):
-    project = Project(
-        name="Before Update", description="Old desc", owner_id=test_owner.id
-    )
-    db_session.add(project)
-    await db_session.flush()
-
-    db_session.add(Access(user_id=test_owner.id, project_id=project.id, role="owner"))
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Before Update", "Old desc")
 
     response = await client.put(
         f"/project/{project.id}/info",
@@ -299,11 +275,7 @@ async def test_update_project_participant_allowed(
     test_participant: User,
     participant_headers: dict,
 ):
-    project = Project(
-        name="Participant Edit", description="desc", owner_id=test_owner.id
-    )
-    db_session.add(project)
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Participant Edit")
 
     db_session.add(
         Access(user_id=test_participant.id, project_id=project.id, role="participant")
@@ -321,16 +293,9 @@ async def test_update_project_participant_allowed(
 async def test_update_project_partial_keeps_description(
     client: AsyncClient, db_session: AsyncSession, test_owner: User, owner_headers: dict
 ):
-    project = Project(
-        name="Partial Update",
-        description="Keep this description",
-        owner_id=test_owner.id,
+    project = await _make_project(
+        db_session, test_owner, "Partial Update", "Keep this description"
     )
-    db_session.add(project)
-    await db_session.flush()
-
-    db_session.add(Access(user_id=test_owner.id, project_id=project.id, role="owner"))
-    await db_session.flush()
 
     response = await client.put(
         f"/project/{project.id}/info",
@@ -346,9 +311,7 @@ async def test_update_project_partial_keeps_description(
 async def test_update_project_no_access(
     client: AsyncClient, db_session: AsyncSession, test_owner: User, other_headers: dict
 ):
-    project = Project(name="Locked Project", description="desc", owner_id=test_owner.id)
-    db_session.add(project)
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Locked Project")
 
     response = await client.put(
         f"/project/{project.id}/info",
@@ -361,14 +324,7 @@ async def test_update_project_no_access(
 async def test_update_project_empty_name(
     client: AsyncClient, db_session: AsyncSession, test_owner: User, owner_headers: dict
 ):
-    project = Project(
-        name="Valid Name Here", description="desc", owner_id=test_owner.id
-    )
-    db_session.add(project)
-    await db_session.flush()
-
-    db_session.add(Access(user_id=test_owner.id, project_id=project.id, role="owner"))
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Valid Name Here")
 
     response = await client.put(
         f"/project/{project.id}/info",
@@ -381,9 +337,7 @@ async def test_update_project_empty_name(
 async def test_update_project_unauthenticated(
     client: AsyncClient, db_session: AsyncSession, test_owner: User
 ):
-    project = Project(name="Unauth Update", description="desc", owner_id=test_owner.id)
-    db_session.add(project)
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Unauth Update")
 
     response = await client.put(
         f"/project/{project.id}/info",
@@ -402,14 +356,7 @@ async def test_delete_project_owner_success(
     owner_headers: dict,
     mock_s3: dict,
 ):
-    project = Project(
-        name="Delete Me Project", description="desc", owner_id=test_owner.id
-    )
-    db_session.add(project)
-    await db_session.flush()
-
-    db_session.add(Access(user_id=test_owner.id, project_id=project.id, role="owner"))
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Delete Me Project")
 
     response = await client.delete(f"/project/{project.id}", headers=owner_headers)
     assert response.status_code in [200, 204], "owner delete should succeed"
@@ -426,13 +373,7 @@ async def test_delete_project_removes_documents_from_db(
     owner_headers: dict,
     mock_s3: dict,
 ):
-    project = Project(
-        name="Project With Docs", description="desc", owner_id=test_owner.id
-    )
-    db_session.add(project)
-    await db_session.flush()
-
-    db_session.add(Access(user_id=test_owner.id, project_id=project.id, role="owner"))
+    project = await _make_project(db_session, test_owner, "Project With Docs")
 
     doc = Document(
         name="attached.pdf",
@@ -459,11 +400,7 @@ async def test_delete_project_participant_blocked(
     participant_headers: dict,
     mock_s3: dict,
 ):
-    project = Project(
-        name="Participant Cannot Delete", description="desc", owner_id=test_owner.id
-    )
-    db_session.add(project)
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Participant Cannot Delete")
 
     db_session.add(
         Access(user_id=test_participant.id, project_id=project.id, role="participant")
@@ -479,11 +416,7 @@ async def test_delete_project_participant_blocked(
 async def test_delete_project_no_access_blocked(
     client: AsyncClient, db_session: AsyncSession, test_owner: User, other_headers: dict
 ):
-    project = Project(
-        name="Other Cannot Delete", description="desc", owner_id=test_owner.id
-    )
-    db_session.add(project)
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Other Cannot Delete")
 
     response = await client.delete(f"/project/{project.id}", headers=other_headers)
     assert response.status_code in [403, 404], "user without access should be blocked"
@@ -492,9 +425,7 @@ async def test_delete_project_no_access_blocked(
 async def test_delete_project_unauthenticated(
     client: AsyncClient, db_session: AsyncSession, test_owner: User
 ):
-    project = Project(name="Unauth Delete", description="desc", owner_id=test_owner.id)
-    db_session.add(project)
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Unauth Delete")
 
     response = await client.delete(f"/project/{project.id}")
     assert response.status_code == 401, "missing token should fail"
@@ -515,12 +446,7 @@ async def test_invite_user_success(
     test_participant: User,
     owner_headers: dict,
 ):
-    project = Project(name="Invite Project", description="desc", owner_id=test_owner.id)
-    db_session.add(project)
-    await db_session.flush()
-
-    db_session.add(Access(user_id=test_owner.id, project_id=project.id, role="owner"))
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Invite Project")
 
     url = f"/project/{project.id}/invite?user={test_participant.login}"
     response = await client.post(url, headers=owner_headers)
@@ -542,14 +468,7 @@ async def test_invite_grants_project_access(
     owner_headers: dict,
     participant_headers: dict,
 ):
-    project = Project(
-        name="Post-Invite Access", description="desc", owner_id=test_owner.id
-    )
-    db_session.add(project)
-    await db_session.flush()
-
-    db_session.add(Access(user_id=test_owner.id, project_id=project.id, role="owner"))
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Post-Invite Access")
 
     # before invite - participant should not have access
     response = await client.get(
@@ -580,9 +499,7 @@ async def test_invite_participant_cannot_invite(
     other_user: User,
     participant_headers: dict,
 ):
-    project = Project(name="Invite Lock", description="desc", owner_id=test_owner.id)
-    db_session.add(project)
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Invite Lock")
 
     db_session.add(
         Access(user_id=test_participant.id, project_id=project.id, role="participant")
@@ -601,11 +518,7 @@ async def test_invite_no_access_cannot_invite(
     test_participant: User,
     other_headers: dict,
 ):
-    project = Project(
-        name="Outsider Invite Attempt", description="desc", owner_id=test_owner.id
-    )
-    db_session.add(project)
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Outsider Invite Attempt")
 
     url = f"/project/{project.id}/invite?user={test_participant.login}"
     response = await client.post(url, headers=other_headers)
@@ -615,12 +528,7 @@ async def test_invite_no_access_cannot_invite(
 async def test_invite_nonexistent_user(
     client: AsyncClient, db_session: AsyncSession, test_owner: User, owner_headers: dict
 ):
-    project = Project(name="Invite Ghost", description="desc", owner_id=test_owner.id)
-    db_session.add(project)
-    await db_session.flush()
-
-    db_session.add(Access(user_id=test_owner.id, project_id=project.id, role="owner"))
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Invite Ghost")
 
     response = await client.post(
         f"/project/{project.id}/invite?user=ghost_nobody_xyz", headers=owner_headers
@@ -635,11 +543,7 @@ async def test_invite_already_invited_returns_409(
     test_participant: User,
     owner_headers: dict,
 ):
-    project = Project(name="Double Invite", description="desc", owner_id=test_owner.id)
-    db_session.add(project)
-    await db_session.flush()
-
-    db_session.add(Access(user_id=test_owner.id, project_id=project.id, role="owner"))
+    project = await _make_project(db_session, test_owner, "Double Invite")
     db_session.add(
         Access(user_id=test_participant.id, project_id=project.id, role="participant")
     )
@@ -656,9 +560,7 @@ async def test_invite_unauthenticated(
     test_owner: User,
     test_participant: User,
 ):
-    project = Project(name="Unauth Invite", description="desc", owner_id=test_owner.id)
-    db_session.add(project)
-    await db_session.flush()
+    project = await _make_project(db_session, test_owner, "Unauth Invite")
 
     url = f"/project/{project.id}/invite?user={test_participant.login}"
     response = await client.post(url)

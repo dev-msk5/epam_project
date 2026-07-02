@@ -47,7 +47,7 @@ cd epam_project
 
 ### 2. Create `.env` file
 ```bash
-cp _.env.example.txt .env
+cp .env.example .env
 ```
 
 `docker-compose.yml` only injects `DB_USER`, `DB_PASSWORD`, `DB_NAME`, and the SSM toggle vars directly as environment variables - everything else (`DATABASE_URL`, `SECRET_KEY`, AWS credentials, etc.) is read by the app from the `.env` file itself, which is mounted into the container via the `.:/app` bind volume. Make sure `.env` lives at the project root and that `DATABASE_URL` matches the `DB_*` values you set:
@@ -129,8 +129,8 @@ users
 projects
 ├── id                  PK
 ├── name
-├── description
-└── owner_id            FK → users.id
+└── description
+    (no owner_id column - ownership is derived entirely from `access.role == 'owner'`)
 
 documents
 ├── id                  PK
@@ -149,13 +149,13 @@ access
 ```
 
 ### Normalization rationale
-- **`access`** is a normalized join table for project membership (many-to-many users↔projects with a role attribute). This keeps 2NF/3NF and makes permission lookups a single indexed query instead of scanning an array/JSON column on `projects`.
+- **`access`** is a normalized join table for project membership (many-to-many users↔projects with a role attribute) and is now the **only** place ownership is recorded - `projects` has no `owner_id` column at all. This avoids having two competing sources of truth for "who owns this" (a column on `projects` plus a row in `access`) that could drift out of sync; there's exactly one place role lives, and it keeps 2NF/3NF instead of scanning an array/JSON column on `projects`.
 - **`documents.url`** stores the S3 **key**, not a full URL - presigned download URLs are generated on demand (15-minute expiry), so the DB stays region/bucket-rename agnostic.
 - **`documents.is_pending`** is a deliberate denormalization: it lets the API mark a row as "in flight" the moment the DB insert happens (before the S3 upload completes) so a crash mid-upload doesn't leave an invisible or half-uploaded file visible to `GET`/`download`. The alternative (a separate `uploads` table) was judged unnecessary complexity for this project's scale.
 - **`documents.size`** is cached on the row instead of derived live from S3 on every request. This is a performance-motivated denormalization: quota checks run on every upload/replace and would otherwise need an S3 `ListObjects` call each time. The Lambda periodically re-derives the real total from S3 as the source of truth and corrects drift (see [Documents, Storage & Quota Enforcement](#documents-storage--quota-enforcement)).
 
 ### ORM vs raw SQL
-SQLAlchemy async ORM (v2.0-style, `Mapped`/`mapped_column`) is used throughout. A raw-SQL equivalent of the core access check (`ProjectService._resolve_access`) would be:
+SQLAlchemy async ORM (2.0-style, `Mapped`/`mapped_column`) is used throughout. A raw-SQL equivalent of the core access check (`ProjectService._resolve_access`) would be:
 ```sql
 SELECT role FROM access
 WHERE project_id = $1 AND user_id = $2;
@@ -184,17 +184,16 @@ Two roles exist, resolved per-project by `ProjectService._resolve_access`:
 | `owner` | Full access - read, update, delete project, delete/replace/upload documents, invite users, generate share links |
 | `participant` | Read + update project info, upload/list/download/replace documents - **cannot** delete the project or delete documents |
 
-- A user whose `id` matches `projects.owner_id` is always resolved as `owner`, even with no explicit row in `access` (an `owner` row is also written to `access` at project-creation time for consistency).
-- Everyone else needs a matching row in `access`; its `role` column determines `participant` vs (rare, invited-as) `owner`.
+- Ownership has **no separate column on `projects`** - a project's owner is whoever holds the `owner` row for that `project_id` in `access`. The `owner` row is written at project-creation time in the same transaction as the project itself, so `access` is the single source of truth for role, with no second field to keep in sync.
+- Every role - `owner` or `participant` - is resolved the same way: a lookup against `access` for `(project_id, user_id)`.
 - Every project/document endpoint calls the same `_resolve_access` resolver - there's a single source of truth for permission checks, not per-route logic.
 - No access row and not the owner → `403`. Nonexistent project → `404`.
 
 ### Access check flow
 ```
 Request → decode JWT → user_id
-  → project.owner_id == user_id?  → role = "owner"
-  → else look up Access(project_id, user_id)
-      → found → role = row.role
+  → look up Access(project_id, user_id)
+      → found → role = row.role   ("owner" or "participant")
       → not found → 403 Forbidden
   → (if the action requires owner and role != "owner") → 403 Forbidden
 ```
@@ -303,7 +302,7 @@ A minimal vanilla-JS single-page app is served by FastAPI itself (`StaticFiles` 
 
 5. **Argon2 password hashing** - chosen over bcrypt alone for stronger resistance to GPU-based attacks; bcrypt is kept registered as a fallback verifier via `pwdlib`.
 
-6. **Authorization centralized in the service layer** - every project/document service method funnels through a single `_resolve_access` resolver rather than duplicating role checks per route, so the permission model can't drift between endpoints.
+6. **Authorization centralized in the service layer, with a single ownership source** - every project/document service method funnels through a single `_resolve_access` resolver, and `Project` itself carries no `owner_id` shortcut column - `access.role` is the only place ownership lives, so there's no second field that could ever fall out of sync with it.
 
 7. **SSM-backed config for production** - rather than baking secrets into the image or requiring a mounted `.env` on EC2, `config.py` can pull all settings from AWS SSM Parameter Store at startup, falling back silently to `.env` if SSM isn't reachable (keeps local dev friction-free).
 
@@ -364,3 +363,4 @@ Test infrastructure (`conftest.py`):
 - **`/project/{id}/share`** generates and returns a valid HMAC-SHA256-signed join token with a 24-hour expiry, but a corresponding **`GET /join`** endpoint to redeem that token (as described in the original requirements) was not found among the reviewed routes - confirm whether it exists elsewhere or still needs to be built before claiming this optional feature as complete for grading.
 - Email delivery for the share link (e.g. via AWS SES) is not implemented - the endpoint currently just returns the `join_url` in the JSON response rather than sending it.
 - `dependencies.py` defines a standalone `require_owner()` helper that doesn't appear to be called anywhere - authorization is instead fully handled inside `ProjectService._resolve_access`; worth removing the dead code or wiring it in for clarity.
+- **Ownership has no DB-level foreign key back to `users` anymore** - `projects` dropped its `owner_id` column, so ownership now lives only in `access` rows, and the project→access/documents cascade is an ORM-level `cascade="all, delete-orphan"`, not a Postgres `ON DELETE CASCADE`. That only fires through this ORM session; it wouldn't protect against orphaned `access`/`documents` rows from a raw-SQL delete or a different code path. Also open: `Access.user_id` still has a plain FK to `users.id` with no `ondelete` behavior defined, so what happens when a user who owns a project is deleted isn't resolved yet - worth deciding and documenting.

@@ -18,7 +18,8 @@ log = logging.getLogger()
 log.setLevel(logging.INFO)
 
 BUCKET = os.environ["S3_BUCKET_NAME"]
-LIMIT_BYTES = int(os.environ.get("PROJECT_STORAGE_LIMIT_BYTES", 524_288_000))  # 500 MB
+LIMIT_BYTES = int(os.environ.get(
+    "PROJECT_STORAGE_LIMIT_BYTES", 524_288_000))  # 500 MB
 
 KEY_RE = re.compile(r"^projects/(?P<project_id>\d+)/documents/")
 

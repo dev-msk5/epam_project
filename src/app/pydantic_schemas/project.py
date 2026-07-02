@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from app.pydantic_schemas.document import DocumentOut
 
@@ -41,3 +41,32 @@ class ProjectOut(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_owner_id(cls, value):
+        if isinstance(value, dict):
+            if "owner_id" in value:
+                return value
+            access_entries = value.get("access_entries") or []
+        else:
+            if getattr(value, "owner_id", None) is not None:
+                return value
+            access_entries = getattr(value, "access_entries", []) or []
+
+        owner_id = None
+        for access in access_entries:
+            if getattr(access, "role", None) == "owner":
+                owner_id = getattr(access, "user_id", None)
+                break
+
+        if owner_id is None:
+            raise ValueError("Project owner could not be resolved from access entries")
+
+        if isinstance(value, dict):
+            value = dict(value)
+            value["owner_id"] = owner_id
+            return value
+
+        setattr(value, "owner_id", owner_id)
+        return value

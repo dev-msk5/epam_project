@@ -8,7 +8,6 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.access import Access
-    from app.models.project import Project
 
 
 class User(Base):
@@ -24,15 +23,9 @@ class User(Base):
         DateTime, server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime | None] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=True
     )
 
-    projects: Mapped[list["Project"]] = relationship(
-        "Project",
-        back_populates="owner",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
     access_entries: Mapped[list["Access"]] = relationship(
         "Access", back_populates="user"
     )

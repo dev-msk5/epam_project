@@ -65,7 +65,7 @@ from app.models.user import User
 async def _make_project(
     db: AsyncSession, owner: User, name: str = "Test Project"
 ) -> Project:
-    project = Project(name=name, description="desc", owner_id=owner.id)
+    project = Project(name=name, description="desc")
     db.add(project)
     await db.flush()
     db.add(Access(user_id=owner.id, project_id=project.id, role="owner"))
