@@ -73,8 +73,7 @@ class ProjectService:
         """
         Creates a new project and its owner Access row atomically
         """
-        logger.info(
-            f"User {owner_id} is creating project: {project_data.name}")
+        logger.info(f"User {owner_id} is creating project: {project_data.name}")
 
         new_project = Project(
             name=project_data.name,
@@ -98,13 +97,11 @@ class ProjectService:
         result = await session.execute(
             select(Project)
             .options(
-                selectinload(Project.documents), selectinload(
-                    Project.access_entries)
+                selectinload(Project.documents), selectinload(Project.access_entries)
             )
             .where(Project.id == new_project.id)
         )
-        logger.info(
-            f"Project {new_project.id} successfully created by User {owner_id}")
+        logger.info(f"Project {new_project.id} successfully created by User {owner_id}")
         return result.scalar_one()
 
     @classmethod
@@ -115,8 +112,7 @@ class ProjectService:
         query = await session.execute(
             select(Project)
             .options(
-                selectinload(Project.documents), selectinload(
-                    Project.access_entries)
+                selectinload(Project.documents), selectinload(Project.access_entries)
             )
             .join(Access, Access.project_id == Project.id)
             .where(Access.user_id == user_id)
@@ -134,8 +130,7 @@ class ProjectService:
         result = await session.execute(
             select(Project)
             .options(
-                selectinload(Project.documents), selectinload(
-                    Project.access_entries)
+                selectinload(Project.documents), selectinload(Project.access_entries)
             )
             .where(Project.id == project_id)
         )
@@ -163,13 +158,11 @@ class ProjectService:
         result = await session.execute(
             select(Project)
             .options(
-                selectinload(Project.documents), selectinload(
-                    Project.access_entries)
+                selectinload(Project.documents), selectinload(Project.access_entries)
             )
             .where(Project.id == project.id)
         )
-        logger.info(
-            f"Project {project_id} successfully updated by User {user_id}")
+        logger.info(f"Project {project_id} successfully updated by User {user_id}")
         return result.scalar_one()
 
     @classmethod
@@ -184,8 +177,7 @@ class ProjectService:
             session, project_id, user_id, require_owner=True
         )
 
-        logger.info(
-            f"User {user_id} requested deletion of Project {project_id}")
+        logger.info(f"User {user_id} requested deletion of Project {project_id}")
 
         # Fetch ONLY the S3 URLs as raw strings
         url_query = await session.execute(
@@ -200,8 +192,7 @@ class ProjectService:
 
         # Lock down state changes in the DB
         await session.commit()
-        logger.info(
-            f"Project {project_id} and metadata successfully cleared from DB")
+        logger.info(f"Project {project_id} and metadata successfully cleared from DB")
 
         # Clean up S3 assets post-commit. If this fails, data integrity is still intact
         for key in s3_keys:
@@ -277,8 +268,7 @@ class ProjectService:
 
         if not invited_user:
             # User does not exist
-            logger.warning(
-                f"Failed to invite user: '{invited_login}' does not exist")
+            logger.warning(f"Failed to invite user: '{invited_login}' does not exist")
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND, f"User '{invited_login}' not found"
             )
@@ -288,8 +278,7 @@ class ProjectService:
             logger.warning(
                 f"User {owner_id} attempted to self-invite to Project {project_id}"
             )
-            raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                                "Cannot invite yourself")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot invite yourself")
 
         # Check if already has access
         existing = (
@@ -304,8 +293,7 @@ class ProjectService:
             logger.warning(
                 f"User '{invited_login}' already has access to Project {project_id}"
             )
-            raise HTTPException(status.HTTP_409_CONFLICT,
-                                "User already has access")
+            raise HTTPException(status.HTTP_409_CONFLICT, "User already has access")
 
         # Grant access
         access = Access(
