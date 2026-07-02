@@ -47,7 +47,7 @@ cd epam_project
 
 ### 2. Create `.env` file
 ```bash
-cp .env.example .env
+cp _.env.example.txt .env
 ```
 
 `docker-compose.yml` only injects `DB_USER`, `DB_PASSWORD`, `DB_NAME`, and the SSM toggle vars directly as environment variables - everything else (`DATABASE_URL`, `SECRET_KEY`, AWS credentials, etc.) is read by the app from the `.env` file itself, which is mounted into the container via the `.:/app` bind volume. Make sure `.env` lives at the project root and that `DATABASE_URL` matches the `DB_*` values you set:
