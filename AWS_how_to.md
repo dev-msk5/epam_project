@@ -3,7 +3,7 @@
 
 # 🚀 AWS EC2 + SSM Deployment Guide
 
-This guide will walk you through deploying our FastAPI Project Dashboard onto an AWS EC2 instance. We will use AWS Systems Manager (SSM) Parameter Store to securely manage our environment variables, and Docker Compose to run our application and database.
+This guide will walk you through deploying this FastAPI Project Dashboard onto an AWS EC2 instance. We will use AWS Systems Manager (SSM) Parameter Store to securely manage our environment variables, and Docker Compose to run our application and database.
 
 ---
 
@@ -107,7 +107,7 @@ We will store all application configurations securely in AWS Systems Manager.
 | `/project-dashboard/prod/ACCESS_TOKEN_EXPIRE_MINUTES` | `String` | `60` |
 | `/project-dashboard/prod/S3_BUCKET_NAME` | `String` | *Insert your S3 bucket name from Step 1* |
 
-> ⚠️ **Critical Rule**: The names of these parameters after the `/` **must** match your Pydantic settings attributes in `config.py` (e.g., `/project-dashboard/prod/SECRET_KEY` matches `SECRET_KEY`). If they are misspelled or in lowercase, the application will crash.
+> **Important Rule**: The names of these parameters after the `/` **must** match your Pydantic settings attributes in `config.py` (e.g., `/project-dashboard/prod/SECRET_KEY` matches `SECRET_KEY`). If they are misspelled or in lowercase, the application will crash.
 
 ---
 
@@ -153,7 +153,7 @@ sudo usermod -aG docker ec2-user
 sudo dnf install docker-compose-plugin -y
 ```
 
-> 🔄 **Crucial**: After running the `usermod` command, you must disconnect and reconnect to the server to apply the permissions:
+> **Important**: After running the `usermod` command, you must disconnect and reconnect to the server to apply the permissions:
 > 1. Type `exit` to disconnect.
 > 2. Run your SSH command again: `ssh -i .\dashboard-key.pem ec2-user@<YOUR_ELASTIC_IP>`
 
@@ -258,8 +258,6 @@ docker compose exec app alembic upgrade head
    http://<YOUR_ELASTIC_IP>:8000/docs
    ```
 3. You will see the interactive **Swagger UI documentation**!
-4. Expand the `/auth` registration route, click **Try it out**, enter details, and execute. If you get a green response code, **congratulations! Your project is securely running on AWS EC2!** 🎉
+4. Expand the `/auth` registration route, click **Try it out**, enter details, and execute. If you get a green response code, **congratulations! Your project is securely running on AWS EC2!**
 
 ---
-
-Please let me know if any steps need further refinement, or if you'd like to dive into the **S3 document upload/download service integration** or the **AWS Lambda S3-event processor** code!

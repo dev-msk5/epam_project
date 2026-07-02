@@ -79,5 +79,3 @@ When your mentor is finished reviewing your work, you can immediately lock your 
    Go back to your **AWS Security Group Inbound Rules** and delete the rule you added for your mentor's IP.
 
 ---
-
-Would you like to review how to write a quick shell script to automate adding/removing their key, or are you ready to jump into verifying the FastAPI JWT code implementation?
